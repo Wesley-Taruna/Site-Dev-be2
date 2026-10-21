@@ -1,9 +1,9 @@
 package handler
 
 import (
-	"fami-boilerplate-service/global"
-	dto "fami-boilerplate-service/internal/app/dto"
-	"fami-boilerplate-service/internal/app/service"
+	"site-dev-backend/global"
+	dto "site-dev-backend/internal/app/dto"
+	"site-dev-backend/internal/app/service"
 
 	"github.com/labstack/echo/v4"
 	"gitlab.com/fami-app-v2/familib/familabs"

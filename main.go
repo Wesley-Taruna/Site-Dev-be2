@@ -7,7 +7,7 @@ package main
 import (
 	"os"
 
-	"fami-boilerplate-service/cmd"
+	"site-dev-backend/cmd"
 
 	"github.com/sirupsen/logrus"
 )

@@ -3,8 +3,8 @@ package cmd
 import (
 	"os"
 
-	"fami-boilerplate-service/global"
-	"fami-boilerplate-service/internal/app/server"
+	"site-dev-backend/global"
+	"site-dev-backend/internal/app/server"
 
 	familabs "gitlab.com/fami-app-v2/familib/familabs/server"
 

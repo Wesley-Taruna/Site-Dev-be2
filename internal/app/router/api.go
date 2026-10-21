@@ -1,7 +1,7 @@
 package router
 
 import (
-	"fami-boilerplate-service/internal/app/handler"
+	"site-dev-backend/internal/app/handler"
 )
 
 var handlers = map[string]RouteHandlers{}

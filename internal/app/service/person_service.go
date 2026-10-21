@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"fami-boilerplate-service/global"
-	dto "fami-boilerplate-service/internal/app/dto"
-	"fami-boilerplate-service/internal/app/model"
-	"fami-boilerplate-service/internal/app/repository"
+	"site-dev-backend/global"
+	dto "site-dev-backend/internal/app/dto"
+	"site-dev-backend/internal/app/model"
+	"site-dev-backend/internal/app/repository"
 
 	pb "gitlab.com/fami-app-v2/fami-datamodel/fami-protobuf/generated/proto/account_service"
 	"gitlab.com/fami-app-v2/familib/familabs/log"

@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"fami-boilerplate-service/global"
-	"fami-boilerplate-service/internal/app/service"
+	"site-dev-backend/global"
+	"site-dev-backend/internal/app/service"
 
 	// pb "git.edenfarm.id/project-version3/erp-services/erp-protobuf/gen/proto/boilerplate_service"
 	pb "gitlab.com/fami-app-v2/fami-datamodel/fami-protobuf/generated/proto/account_service"

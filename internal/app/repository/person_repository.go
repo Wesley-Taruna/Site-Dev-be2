@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 
-	"fami-boilerplate-service/global"
-	"fami-boilerplate-service/internal/app/model"
+	"site-dev-backend/global"
+	"site-dev-backend/internal/app/model"
 
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
 )

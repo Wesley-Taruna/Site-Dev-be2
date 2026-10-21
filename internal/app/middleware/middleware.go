@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"fami-boilerplate-service/global"
+	"site-dev-backend/global"
 
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
 )

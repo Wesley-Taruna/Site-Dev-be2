@@ -1,4 +1,4 @@
-module fami-boilerplate-service
+module site-dev-backend
 
 go 1.23
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"fami-boilerplate-service/global"
+	"site-dev-backend/global"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"

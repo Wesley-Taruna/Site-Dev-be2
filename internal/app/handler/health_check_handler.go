@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"fami-boilerplate-service/global"
+	"site-dev-backend/global"
 
 	"github.com/labstack/echo/v4"
 	"gitlab.com/fami-app-v2/familib/familabs"

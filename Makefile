@@ -4,7 +4,7 @@
 ## license that can be found in the LICENSE file.
 ##
 
-PACKAGE = fami-boilerplate-service
+PACKAGE = site-dev-backend
 COMMIT_HASH = `git rev-parse --short HEAD 2>/dev/null`
 BUILD_DATE = `date +%FT%T%z`
 LDFLAGS = -ldflags "-X ${PACKAGE}/iqlib.CommitHash=${COMMIT_HASH} -X ${PACKAGE}/iqlib.BuildDate=${BUILD_DATE}"

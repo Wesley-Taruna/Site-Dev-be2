@@ -7,8 +7,8 @@ import (
 	"os"
 	"os/signal"
 
-	"fami-boilerplate-service/global"
-	"fami-boilerplate-service/internal/app/router"
+	"site-dev-backend/global"
+	"site-dev-backend/internal/app/router"
 
 	"github.com/sirupsen/logrus"
 )

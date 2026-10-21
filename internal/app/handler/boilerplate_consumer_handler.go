@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"fami-boilerplate-service/global"
-	dto "fami-boilerplate-service/internal/app/dto"
-	"fami-boilerplate-service/internal/app/service"
+	"site-dev-backend/global"
+	dto "site-dev-backend/internal/app/dto"
+	"site-dev-backend/internal/app/service"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/pkg/errors"

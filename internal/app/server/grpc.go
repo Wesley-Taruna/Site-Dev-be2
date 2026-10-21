@@ -1,13 +1,13 @@
 package server
 
 import (
-	"fami-boilerplate-service/global"
-	"fami-boilerplate-service/internal/app/handler"
-	"fami-boilerplate-service/internal/app/service"
 	"fmt"
 	"net"
 	"os"
 	"os/signal"
+	"site-dev-backend/global"
+	"site-dev-backend/internal/app/handler"
+	"site-dev-backend/internal/app/service"
 
 	"github.com/sirupsen/logrus"
 	pb "gitlab.com/fami-app-v2/fami-datamodel/fami-protobuf/generated/proto/account_service"

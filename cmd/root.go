@@ -7,7 +7,7 @@ import (
 // NewRootCommand returns a new instance of an command
 func NewRootCommand() *cobra.Command {
 	var command = &cobra.Command{
-		Use:   "fami-boilerplate-service",
+		Use:   "site-dev-backend",
 		Short: "A brief description of your application",
 		Long: `A longer description that spans multiple lines and likely contains
 			examples and usage of using your application.`,
