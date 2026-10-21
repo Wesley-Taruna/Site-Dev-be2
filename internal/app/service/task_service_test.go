@@ -33,18 +33,22 @@ func testOptions() opt.Options {
 }
 
 type taskServiceMocks struct {
-	task    *mocks.ITaskRepository
-	history *mocks.ITaskHistoryRepository
-	site    *mocks.ISiteRepository
-	user    *mocks.IUserRepository
+	task     *mocks.ITaskRepository
+	history  *mocks.ITaskHistoryRepository
+	site     *mocks.ISiteRepository
+	user     *mocks.IUserRepository
+	context  *mocks.ISiteContextRepository
+	approval *mocks.IApprovalRepository
 }
 
 func newTestTaskService(t *testing.T) (*TaskService, taskServiceMocks) {
 	m := taskServiceMocks{
-		task:    mocks.NewITaskRepository(t),
-		history: mocks.NewITaskHistoryRepository(t),
-		site:    mocks.NewISiteRepository(t),
-		user:    mocks.NewIUserRepository(t),
+		task:     mocks.NewITaskRepository(t),
+		history:  mocks.NewITaskHistoryRepository(t),
+		site:     mocks.NewISiteRepository(t),
+		user:     mocks.NewIUserRepository(t),
+		context:  mocks.NewISiteContextRepository(t),
+		approval: mocks.NewIApprovalRepository(t),
 	}
 	s := &TaskService{
 		opt:                   testOptions(),
@@ -52,6 +56,8 @@ func newTestTaskService(t *testing.T) (*TaskService, taskServiceMocks) {
 		RepositoryTaskHistory: m.history,
 		RepositorySite:        m.site,
 		RepositoryUser:        m.user,
+		RepositorySiteContext: m.context,
+		RepositoryApproval:    m.approval,
 	}
 	return s, m
 }

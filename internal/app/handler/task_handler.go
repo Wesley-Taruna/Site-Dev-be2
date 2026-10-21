@@ -22,10 +22,19 @@ func (h *TaskHandler) URLMapping(r *echo.Group) {
 	h.Option = global.Setup
 	h.ServicesTask = service.NewTaskService()
 
-	mw := middleware.NewMiddleware()
+	h.routes(r, middleware.NewMiddleware())
+}
 
+// routes registers the endpoints (also used by the handler tests).
+func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("", h.Index, mw.Authorized())
+	r.GET("/site-list", h.SiteList, mw.Authorized())
+	r.GET("/pending-approvals", h.PendingApprovals, mw.Authorized())
+	r.GET("/approval-history", h.ApprovalHistory, mw.Authorized())
+	r.GET("/status/count", h.StatusCount, mw.Authorized())
+	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/history", h.History, mw.Authorized())
+	r.GET("/:id/attachment", h.Attachment, mw.Authorized())
 }
 
 // Index is GET /v1/task: the caller's task list (site staff see only their
@@ -80,6 +89,142 @@ func (h TaskHandler) History(c echo.Context) (err error) {
 	ctx.ResponseData = histories
 
 	return ctx.Serve(err)
+}
+
+// Detail is GET /v1/task/:id (id = task_id or site_id): site, on-site
+// context, approval chain, history and attachments in one answer.
+func (h TaskHandler) Detail(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	ctx.ResponseData, err = h.ServicesTask.GetDetail(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// Attachment is GET /v1/task/:id/attachment (id = site_id): the site's
+// attachments only.
+func (h TaskHandler) Attachment(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	ctx.ResponseData, err = h.ServicesTask.GetAttachments(ctx.Request().Context(), ctx.GetUriParamString("id"))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// StatusCount is GET /v1/task/status/count: tasks per status (site staff:
+// only their own).
+func (h TaskHandler) StatusCount(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	ctx.ResponseData, err = h.ServicesTask.CountByStatus(ctx.Request().Context(), userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// SiteList is GET /v1/task/site-list: the "Site Request" table, every
+// role sees every site.
+func (h TaskHandler) SiteList(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.ListRequestGet
+	var page *familabs.Paginator
+	req, page, err = listRequest(ctx)
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	var tasks []dto.TaskResponseGet
+	var total int64
+	tasks, total, err = h.ServicesTask.GetSiteList(ctx.Request().Context(), req)
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	ctx.DataList(tasks, total, page)
+
+	return ctx.Serve(err)
+}
+
+// PendingApprovals is GET /v1/task/pending-approvals: what waits for the
+// caller's decision.
+func (h TaskHandler) PendingApprovals(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.ListRequestGet
+	var page *familabs.Paginator
+	req, page, err = listRequest(ctx)
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	var rows []dto.PendingApprovalResponseGet
+	var total int64
+	rows, total, err = h.ServicesTask.GetPendingApprovals(ctx.Request().Context(), req, userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	ctx.DataList(rows, total, page)
+
+	return ctx.Serve(err)
+}
+
+// ApprovalHistory is GET /v1/task/approval-history: what the caller
+// already decided.
+func (h TaskHandler) ApprovalHistory(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.ListRequestGet
+	var page *familabs.Paginator
+	req, page, err = listRequest(ctx)
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	var rows []dto.ApprovalHistoryResponseGet
+	var total int64
+	rows, total, err = h.ServicesTask.GetApprovalHistory(ctx.Request().Context(), req, userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	ctx.DataList(rows, total, page)
+
+	return ctx.Serve(err)
+}
+
+// listRequest reads page, sort_by, sort_dir and q of a paged list.
+func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.Paginator, err error) {
+	page, err = familabs.NewPaginator(ctx)
+	if err != nil {
+		return
+	}
+
+	req = dto.ListRequestGet{
+		Page:    page.Page,
+		SortBy:  ctx.GetParamString("sort_by"),
+		SortDir: ctx.GetParamString("sort_dir"),
+		Search:  ctx.GetParamString("q"),
+	}
+	return
 }
 
 // userIDFromContext reads the user ID that middlewarex.Authorization (used

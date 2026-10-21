@@ -1,10 +1,18 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	dto "site-dev-backend/internal/app/dto"
+	"site-dev-backend/internal/app/model"
+	"site-dev-backend/internal/app/repository"
+
+	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 )
 
 // orderClause builds the ORDER BY of a list the same way as site-dev-api's
@@ -34,4 +42,42 @@ func pageOffset(page int) int {
 		page = 1
 	}
 	return (page - 1) * dto.ListPageSize
+}
+
+// getUser loads the caller from Users. The role always comes from there, not
+// from the token (same as site-dev-api's Authenticated middleware): unknown
+// user = 401 "user not found".
+func getUser(ctx context.Context, repo repository.IUserRepository, userID int64) (user *model.User, err error) {
+	user, err = repo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			err = echo.NewHTTPError(http.StatusUnauthorized, "user not found")
+		} else {
+			err = echo.NewHTTPError(http.StatusInternalServerError, "failed to verify user")
+		}
+		return
+	}
+	return
+}
+
+// usernameOf returns a user's name, or "" when the user is unknown (the app
+// then shows "User #<id>"), like site-dev-api's TaskService.usernameOf.
+func usernameOf(ctx context.Context, repo repository.IUserRepository, userID int64) string {
+	if userID == 0 {
+		return ""
+	}
+	user, err := repo.GetByID(ctx, userID)
+	if err != nil || user == nil {
+		return ""
+	}
+	return user.Username
+}
+
+// ignoreNotFound turns gorm.ErrRecordNotFound into nil (site-dev-api
+// global.HandleGORMErr).
+func ignoreNotFound(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	return err
 }

@@ -56,9 +56,9 @@ func newTestEcho(t *testing.T, svc *mocks.ITaskService) *echo.Echo {
 	h := TaskHandler{Option: o, ServicesTask: svc}
 	mw := &middleware.Middleware{Option: o.Common}
 
-	g := e.Group("v1/").Group("task")
-	g.GET("", h.Index, mw.Authorized())
-	g.GET("/:id/history", h.History, mw.Authorized())
+	h.routes(e.Group("v1/").Group("task"), mw)
+	d := DashboardHandler{Option: o, ServicesTask: svc}
+	d.routes(e.Group("v1/").Group("dashboard/task"), mw)
 	return e
 }
 

@@ -12,7 +12,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -21,20 +20,13 @@ import (
 	"testing"
 	"time"
 
-	"site-dev-backend/global"
 	"site-dev-backend/internal/pkg/sqlfake"
 
 	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/fami-app-v2/familib/familabs"
 	jwtx "gitlab.com/fami-app-v2/familib/familabs/jwt"
-	"gitlab.com/fami-app-v2/familib/familabs/log"
-	"gitlab.com/fami-app-v2/familib/familabs/opt"
-	"go.opentelemetry.io/otel/trace/noop"
-	"gorm.io/driver/sqlserver"
-	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
@@ -110,23 +102,7 @@ func setup(t *testing.T, role string) (*echo.Echo, *sqlLog) {
 	}})
 	require.NoError(t, err)
 
-	rec := &sqlLog{}
-	db, err := gorm.Open(sqlserver.New(sqlserver.Config{Conn: conn}), &gorm.Config{DisableAutomaticPing: true, Logger: rec})
-	require.NoError(t, err)
-
-	lgr := logrus.New()
-	lgr.SetOutput(io.Discard)
-	o := opt.Options{
-		Database: opt.Database{Read: db, Write: db},
-		Logger:   log.NewLoggerWithClient("site-dev-backend-test", lgr),
-		Trace:    noop.NewTracerProvider().Tracer("test"),
-	}
-	o.Config.App.Name = "site-dev-backend"
-	o.Config.Jwt.Key = testJwtKey
-	global.Setup = global.HandlerOptions{Common: o}
-
-	e := Router()
-	lgr.SetOutput(io.Discard) // Router() points the logger at stdout
+	e, rec, _ := stackOn(t, conn)
 	return e, rec
 }
 
@@ -170,18 +146,108 @@ func assertSameJSON(t *testing.T, want, got []byte) {
 	assert.Equal(t, wb.String(), gb.String())
 }
 
-// TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + "task" ends up
-// at the same paths as site-dev-api's "/v1/" + "task".
+// siteDevAPIRoutes is every route of site-dev-api 20eeab4 (all handlers'
+// URLMapping under "/v1/"), 47 in total.
+var siteDevAPIRoutes = []string{
+	"DELETE /v1/users/:id",
+	"GET /v1/approval-matrix",
+	"GET /v1/attachment/:id/file",
+	"GET /v1/dashboard/task/history",
+	"GET /v1/dashboard/task/status/count",
+	"GET /v1/geocoding/reverse",
+	"GET /v1/geocoding/search",
+	"GET /v1/health-check",
+	"GET /v1/roles",
+	"GET /v1/settings/limits",
+	"GET /v1/site",
+	"GET /v1/site/:id",
+	"GET /v1/site/:id/context",
+	"GET /v1/site/active-list",
+	"GET /v1/site/maps",
+	"GET /v1/task",
+	"GET /v1/task/:id",
+	"GET /v1/task/:id/attachment",
+	"GET /v1/task/:id/history",
+	"GET /v1/task/ai-insight/:site_id",
+	"GET /v1/task/ai-insight/quota",
+	"GET /v1/task/approval-history",
+	"GET /v1/task/pending-approvals",
+	"GET /v1/task/site-list",
+	"GET /v1/task/status/count",
+	"GET /v1/users",
+	"GET /v1/wilayah/provinces",
+	"GET /v1/wilayah/provinces/:code",
+	"GET /v1/wilayah/search",
+	"POST /v1/approval-matrix",
+	"POST /v1/queue/ai-insight",
+	"POST /v1/queue/ai-insight-quota-flush",
+	"POST /v1/queue/approval-email",
+	"POST /v1/settings/quota-flush",
+	"POST /v1/task/:id/approve",
+	"POST /v1/task/:status",
+	"POST /v1/task/ai-insight",
+	"POST /v1/task/ai-insight/preview",
+	"POST /v1/upload/add",
+	"POST /v1/upload/remove",
+	"POST /v1/users",
+	"POST /v1/validation",
+	"POST /v1/validation/approval",
+	"PUT /v1/approval-matrix/:id",
+	"PUT /v1/settings/limits",
+	"PUT /v1/task/context/:site_id",
+	"PUT /v1/users/:id",
+}
+
+// extraRoutes are routes the new service has that site-dev-api 20eeab4 does
+// not: the boilerplate sample (kept until decided) and later the local and
+// November additions.
+var extraRoutes = map[string]bool{
+	"GET /v1/person":        true,
+	"GET /v1/person/:id":    true,
+	"POST /v1/person":       true,
+	"PUT /v1/person/:id":    true,
+	"DELETE /v1/person/:id": true,
+}
+
+// TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends
+// up at exactly site-dev-api's paths; nothing outside the list exists.
 func TestRoutesMatchSiteDevAPI(t *testing.T) {
+	require.Len(t, siteDevAPIRoutes, 47)
 	e, _ := setup(t, "USER")
-	var routes []string
+	known := map[string]bool{}
+	for _, r := range siteDevAPIRoutes {
+		known[r] = true
+	}
+	ported := map[string]bool{}
 	for _, r := range e.Routes() {
-		if strings.HasPrefix(r.Path, "/v1/task") {
-			routes = append(routes, r.Method+" "+r.Path)
+		if !strings.HasPrefix(r.Path, "/v1/") || r.Method == "echo_route_not_found" {
+			continue
+		}
+		route := r.Method + " " + r.Path
+		if extraRoutes[route] {
+			continue
+		}
+		assert.True(t, known[route], "route %s is not in site-dev-api", route)
+		ported[route] = true
+	}
+	var missing []string
+	for _, r := range siteDevAPIRoutes {
+		if !ported[r] {
+			missing = append(missing, r)
 		}
 	}
-	sort.Strings(routes)
-	assert.Equal(t, []string{"GET /v1/task", "GET /v1/task/:id/history"}, routes)
+	sort.Strings(missing)
+	t.Logf("site-dev-api routes ported: %d of %d; not yet: %v", len(ported), len(siteDevAPIRoutes), missing)
+	assert.Subset(t, siteDevAPIRoutes, keys(ported))
+}
+
+func keys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestSideBySide_TaskList_Staff(t *testing.T) {
