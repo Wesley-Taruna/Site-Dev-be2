@@ -77,6 +77,66 @@ func (_m *ISiteRepository) GetAttachmentsBySiteID(ctx context.Context, siteID st
 	return r0, ret.Error(1)
 }
 
+// Get provides a mock function with given fields: ctx, offset, limit, orderBy, city, region
+func (_m *ISiteRepository) Get(ctx context.Context, offset int, limit int, orderBy string, city string, region string) ([]*model.Site, int64, error) {
+	ret := _m.Called(ctx, offset, limit, orderBy, city, region)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int, int, string, string, string) ([]*model.Site, int64, error)); ok {
+		return rf(ctx, offset, limit, orderBy, city, region)
+	}
+
+	var r0 []*model.Site
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.Site)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
+// GetAll provides a mock function with given fields: ctx
+func (_m *ISiteRepository) GetAll(ctx context.Context) ([]*model.Site, error) {
+	ret := _m.Called(ctx)
+
+	if rf, ok := ret.Get(0).(func(context.Context) ([]*model.Site, error)); ok {
+		return rf(ctx)
+	}
+
+	var r0 []*model.Site
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.Site)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetActiveStoreMaps provides a mock function with given fields: ctx
+func (_m *ISiteRepository) GetActiveStoreMaps(ctx context.Context) ([]model.StoreMap, error) {
+	ret := _m.Called(ctx)
+
+	if rf, ok := ret.Get(0).(func(context.Context) ([]model.StoreMap, error)); ok {
+		return rf(ctx)
+	}
+
+	var r0 []model.StoreMap
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.StoreMap)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetActiveStores provides a mock function with given fields: ctx, search, limit, offset
+func (_m *ISiteRepository) GetActiveStores(ctx context.Context, search string, limit int, offset int) ([]model.StoreMap, int64, error) {
+	ret := _m.Called(ctx, search, limit, offset)
+
+	if rf, ok := ret.Get(0).(func(context.Context, string, int, int) ([]model.StoreMap, int64, error)); ok {
+		return rf(ctx, search, limit, offset)
+	}
+
+	var r0 []model.StoreMap
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.StoreMap)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
 // NewISiteRepository creates a new instance of ISiteRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteRepository(t interface {
 	mock.TestingT

@@ -19,6 +19,16 @@ type ISiteRepository interface {
 	GetByID(ctx context.Context, siteID string) (site *model.Site, err error)
 	// GetAttachmentsBySiteID returns a site's attachments, oldest first.
 	GetAttachmentsBySiteID(ctx context.Context, siteID string) (attachments []*model.SiteAttachment, err error)
+	// Get lists sites (city/region "" = no filter), with the total count.
+	Get(ctx context.Context, offset int, limit int, orderBy string, city string, region string) (sites []*model.Site, count int64, err error)
+	// GetAll returns every site (map view).
+	GetAll(ctx context.Context) (sites []*model.Site, err error)
+	// GetActiveStoreMaps returns the active stores of AMFIBI_MASTER for the
+	// map view.
+	GetActiveStoreMaps(ctx context.Context) (stores []model.StoreMap, err error)
+	// GetActiveStores is the searchable, paged list of the same stores
+	// ("Site Active" table); search matches store name or store type.
+	GetActiveStores(ctx context.Context, search string, limit int, offset int) (stores []model.StoreMap, count int64, err error)
 }
 
 type SiteRepository struct {
@@ -91,6 +101,129 @@ func (r *SiteRepository) GetAttachmentsBySiteID(ctx context.Context, siteID stri
 	db := readDB(ctx, r.opt)
 
 	if err = db.Where("SiteID = ?", siteID).Order("SiteAttachmentID ASC").Find(&attachments).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) Get(ctx context.Context, offset int, limit int, orderBy string, city string, region string) (sites []*model.Site, count int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.Get")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	if city != "" {
+		db = db.Where("SiteCity = ?", city)
+	}
+	if region != "" {
+		db = db.Where("SiteRegion = ?", region)
+	}
+
+	if err = db.Model(new(model.Site)).Count(&count).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	if orderBy != "" {
+		db = db.Order(orderBy)
+	}
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	if offset > 0 {
+		db = db.Offset(offset)
+	}
+
+	if err = db.Find(&sites).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetAll(ctx context.Context) (sites []*model.Site, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetAll")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	if err = db.Find(&sites).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+// activeStoreMapQuery, activeStoreListQuery and activeStoreCountQuery are
+// site-dev-api's queries, unchanged.
+const activeStoreMapQuery = `
+	SELECT
+		ms.StoreName,
+		mt.StoreTypeName,
+		'Site Active' as SiteType,
+		ms.Longitude,
+		ms.Latitude
+	FROM AMFIBI_MASTER.dbo.MStore as ms
+	INNER JOIN AMFIBI_MASTER.dbo.MStoreType mt on ms.StoreType = mt.StoreTypeID
+	WHERE ms.Longitude != 0 and ms.IsActive = 1 and ms.StoreName != 'FOODTRUCK 1'
+`
+
+const activeStoreListQuery = `
+	SELECT
+		ms.StoreCode,
+		ms.StoreName,
+		mt.StoreTypeName,
+		'Site Active' as SiteType,
+		ms.Longitude,
+		ms.Latitude,
+		ms.OpeningStoreDT
+	FROM AMFIBI_MASTER.dbo.MStore as ms
+	INNER JOIN AMFIBI_MASTER.dbo.MStoreType mt on ms.StoreType = mt.StoreTypeID
+	WHERE ms.Longitude != 0 and ms.IsActive = 1 and ms.StoreName != 'FOODTRUCK 1'
+		AND (ms.StoreName LIKE ? OR mt.StoreTypeName LIKE ?)
+	ORDER BY ms.StoreCode
+	OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+`
+
+const activeStoreCountQuery = `
+	SELECT COUNT(1)
+	FROM AMFIBI_MASTER.dbo.MStore as ms
+	INNER JOIN AMFIBI_MASTER.dbo.MStoreType mt on ms.StoreType = mt.StoreTypeID
+	WHERE ms.Longitude != 0 and ms.IsActive = 1 and ms.StoreName != 'FOODTRUCK 1'
+		AND (ms.StoreName LIKE ? OR mt.StoreTypeName LIKE ?)
+`
+
+func (r *SiteRepository) GetActiveStoreMaps(ctx context.Context) (stores []model.StoreMap, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetActiveStoreMaps")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	if err = db.Raw(activeStoreMapQuery).Scan(&stores).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetActiveStores(ctx context.Context, search string, limit int, offset int) (stores []model.StoreMap, count int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetActiveStores")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+	like := "%" + search + "%"
+
+	if err = db.Raw(activeStoreCountQuery, like, like).Scan(&count).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	if err = db.Raw(activeStoreListQuery, like, like, offset, limit).Scan(&stores).Error; err != nil {
 		span.RecordError(err)
 		return
 	}

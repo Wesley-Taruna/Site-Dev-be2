@@ -107,3 +107,27 @@ func TestSiteContextRepositoryReads(t *testing.T) {
 		`SELECT * FROM "SiteCustomNotes" WHERE SiteID = 'ST1' ORDER BY ID ASC`,
 	}, rec.sqls)
 }
+
+func TestSiteRepositoryGet_NoFilters(t *testing.T) {
+	o, rec := fakeDBOptions(t)
+	r := &SiteRepository{opt: o}
+
+	_, _, err := r.Get(context.Background(), 0, 20, "CreatedAt ASC", "", "")
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		`SELECT count(*) FROM "Sites"`,
+		`SELECT * FROM "Sites" ORDER BY CreatedAt ASC OFFSET 0 ROW FETCH NEXT 20 ROWS ONLY`,
+	}, rec.sqls)
+}
+
+func TestSiteRepositoryGetActiveStores_CountFailure(t *testing.T) {
+	dbErr := assert.AnError
+	o, rec := fakeDBOptions(t, sqlfake.Result{Match: "SELECT COUNT(1)", Err: dbErr})
+	r := &SiteRepository{opt: o}
+
+	_, _, err := r.GetActiveStores(context.Background(), "x", 20, 0)
+
+	assert.ErrorIs(t, err, dbErr)
+	assert.Len(t, rec.sqls, 1)
+}
