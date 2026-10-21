@@ -18,6 +18,7 @@ type IApprovalRepository interface {
 	// ErrRecordNotFound if the task was never submitted).
 	GetHeaderByTaskID(ctx context.Context, taskID string) (header *model.ApprovalHeader, err error)
 	GetHeaderByID(ctx context.Context, id uint) (header *model.ApprovalHeader, err error)
+	GetDetailByID(ctx context.Context, id uint) (detail *model.ApprovalDetail, err error)
 	// GetDetailsByHeaderID returns the levels of a round, lowest level first.
 	GetDetailsByHeaderID(ctx context.Context, headerID uint) (details []*model.ApprovalDetail, err error)
 	// GetPendingByApprover lists the PENDING rows of an approver; search
@@ -71,6 +72,22 @@ func (r *ApprovalRepository) GetHeaderByID(ctx context.Context, id uint) (header
 	if err = db.Where("ID = ?", id).First(header).Error; err != nil {
 		span.RecordError(err)
 		header = nil
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetDetailByID(ctx context.Context, id uint) (detail *model.ApprovalDetail, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetDetailByID")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	detail = &model.ApprovalDetail{}
+	if err = db.Where("ID = ?", id).First(detail).Error; err != nil {
+		span.RecordError(err)
+		detail = nil
 		return
 	}
 

@@ -8,4 +8,8 @@ type Clients struct {
 	// AuditServiceGrpc         client.IAuditServiceGrpc
 	// BridgeServiceGrpc        client.IBridgeServiceGrpc
 	// ConfigurationServiceGrpc client.IConfigurationServiceGrpc
+
+	// Outside services Site Dev calls (one interface each; services get
+	// them through the New...Client constructors):
+	ApprovalJWT IApprovalJWTClient // fami-module token for approval-link login
 }

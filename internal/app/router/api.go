@@ -17,4 +17,5 @@ func init() {
 	handlers["users"] = &handler.UserHandler{}
 	handlers["approval-matrix"] = &handler.ApprovalMatrixHandler{}
 	handlers["settings"] = &handler.SettingsHandler{}
+	handlers["validation"] = &handler.ValidationHandler{}
 }

@@ -47,6 +47,21 @@ func (_m *IApprovalRepository) GetHeaderByID(ctx context.Context, id uint) (*mod
 	return r0, ret.Error(1)
 }
 
+// GetDetailByID provides a mock function with given fields: ctx, id
+func (_m *IApprovalRepository) GetDetailByID(ctx context.Context, id uint) (*model.ApprovalDetail, error) {
+	ret := _m.Called(ctx, id)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint) (*model.ApprovalDetail, error)); ok {
+		return rf(ctx, id)
+	}
+
+	var r0 *model.ApprovalDetail
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.ApprovalDetail)
+	}
+	return r0, ret.Error(1)
+}
+
 // GetDetailsByHeaderID provides a mock function with given fields: ctx, headerID
 func (_m *IApprovalRepository) GetDetailsByHeaderID(ctx context.Context, headerID uint) ([]*model.ApprovalDetail, error) {
 	ret := _m.Called(ctx, headerID)
