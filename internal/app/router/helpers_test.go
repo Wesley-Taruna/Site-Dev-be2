@@ -89,7 +89,13 @@ var clientOverride func(*client.Clients)
 
 // withClients swaps clients for the stacks built in this test.
 func withClients(t *testing.T, fn func(*client.Clients)) {
-	clientOverride = fn
+	prev := clientOverride
+	clientOverride = func(c *client.Clients) {
+		if prev != nil {
+			prev(c)
+		}
+		fn(c)
+	}
 	t.Cleanup(func() { clientOverride = nil })
 }
 
@@ -153,4 +159,15 @@ func stableSQL(sqls []string) []string {
 		out[i] = timeLiteral.ReplaceAllString(s, "'<time>'")
 	}
 	return out
+}
+
+// jsonUnmarshalData reads the "data" of an envelope into v.
+func jsonUnmarshalData(body []byte, v any) error {
+	var env struct {
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(body, &env); err != nil {
+		return err
+	}
+	return json.Unmarshal(env.Data, v)
 }
