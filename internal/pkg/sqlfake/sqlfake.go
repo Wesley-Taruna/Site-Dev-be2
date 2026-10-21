@@ -16,7 +16,9 @@ import (
 	"sync/atomic"
 )
 
-// Result is the canned answer for queries that contain Match.
+// Result is the canned answer for queries whose text contains Match. The
+// text is the SQL (with @p1.. placeholders) followed by " |<value>" for
+// every argument, so Match can also pick a query by its values.
 type Result struct {
 	Match   string
 	Columns []string
@@ -73,14 +75,19 @@ func (c *conn) Prepare(string) (driver.Stmt, error) {
 func (c *conn) Close() error              { return nil }
 func (c *conn) Begin() (driver.Tx, error) { return nil, errors.New("sqlfake: no transactions") }
 
-func (c *conn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+func (c *conn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	text := query
+	for _, a := range args {
+		text += fmt.Sprintf(" |%v", a.Value)
+	}
+
 	c.db.mu.Lock()
 	c.db.queries = append(c.db.queries, query)
 	results := c.db.Results
 	c.db.mu.Unlock()
 
 	for _, r := range results {
-		if strings.Contains(query, r.Match) {
+		if strings.Contains(text, r.Match) {
 			if r.Err != nil {
 				return nil, r.Err
 			}
