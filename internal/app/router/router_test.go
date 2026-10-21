@@ -207,6 +207,8 @@ var extraRoutes = map[string]bool{
 	"POST /v1/person":       true,
 	"PUT /v1/person/:id":    true,
 	"DELETE /v1/person/:id": true,
+	// local §8 (93633f0), rewritten
+	"GET /v1/task/nearby": true,
 }
 
 // TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends

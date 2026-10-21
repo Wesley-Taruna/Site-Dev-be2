@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"errors"
+	"net/http"
+	"strconv"
+
 	"site-dev-backend/global"
 	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
@@ -38,6 +42,7 @@ func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/pending-approvals", h.PendingApprovals, mw.Authorized())
 	r.GET("/approval-history", h.ApprovalHistory, mw.Authorized())
 	r.GET("/status/count", h.StatusCount, mw.Authorized())
+	r.GET("/nearby", h.Nearby, mw.Authorized())
 	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/history", h.History, mw.Authorized())
 	r.GET("/:id/attachment", h.Attachment, mw.Authorized())
@@ -67,6 +72,41 @@ func (h TaskHandler) Save(c echo.Context) (err error) {
 	}
 
 	ctx.ResponseData, err = h.ServicesSite.UpsertWithStatus(ctx.Request().Context(), req, status, userIDFromContext(ctx))
+	var dupErr *service.DuplicateNearbyError
+	if errors.As(err, &dupErr) {
+		// 409 with the nearby requests as data; the app shows them and may
+		// send again with "confirm_duplicate": true (local §8)
+		ctx.Data(dupErr.Items)
+		return ctx.Serve(echo.NewHTTPError(http.StatusConflict, dupErr.Error()))
+	}
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// Nearby is GET /v1/task/nearby?lat=&lng=&radius=&exclude_site_id= (local
+// §8): active requests of all staff near a point, nearest first.
+func (h TaskHandler) Nearby(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	req := dto.NearbyRequestGet{ExcludeSiteID: ctx.QueryParam("exclude_site_id")}
+	var parseErr error
+	if req.Lat, parseErr = strconv.ParseFloat(ctx.QueryParam("lat"), 64); parseErr != nil {
+		return ctx.Serve(familabs.ErrorInvalid("lat"))
+	}
+	if req.Lng, parseErr = strconv.ParseFloat(ctx.QueryParam("lng"), 64); parseErr != nil {
+		return ctx.Serve(familabs.ErrorInvalid("lng"))
+	}
+	if v := ctx.QueryParam("radius"); v != "" {
+		if req.RadiusM, parseErr = strconv.Atoi(v); parseErr != nil || req.RadiusM < 0 {
+			return ctx.Serve(familabs.ErrorInvalid("radius"))
+		}
+	}
+
+	ctx.ResponseData, err = h.ServicesTask.GetNearbyRequests(ctx.Request().Context(), req)
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

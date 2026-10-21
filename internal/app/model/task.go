@@ -35,3 +35,14 @@ type TaskStatusCount struct {
 	TaskStatus string `gorm:"column:TaskStatus" json:"task_status"`
 	Count      int64  `gorm:"column:Count" json:"count"`
 }
+
+// RequestPoint is one site with its task status and owner, inside a
+// coordinate box (query result, not a table).
+type RequestPoint struct {
+	SiteID     string  `gorm:"column:SiteID"`
+	SiteName1  string  `gorm:"column:SiteName1"`
+	SiteLat    float64 `gorm:"column:SiteLat"`
+	SiteLon    float64 `gorm:"column:SiteLon"`
+	TaskStatus string  `gorm:"column:TaskStatus"`
+	CreatedBy  int64   `gorm:"column:CreatedBy"`
+}

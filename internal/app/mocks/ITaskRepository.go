@@ -135,6 +135,21 @@ func (_m *ITaskRepository) UpdateStatus(ctx context.Context, taskID string, upda
 	return r0
 }
 
+// GetActiveRequestPoints provides a mock function with given fields: ctx, minLat, maxLat, minLon, maxLon, extraStatuses
+func (_m *ITaskRepository) GetActiveRequestPoints(ctx context.Context, minLat float64, maxLat float64, minLon float64, maxLon float64, extraStatuses []string) ([]model.RequestPoint, error) {
+	ret := _m.Called(ctx, minLat, maxLat, minLon, maxLon, extraStatuses)
+
+	if rf, ok := ret.Get(0).(func(context.Context, float64, float64, float64, float64, []string) ([]model.RequestPoint, error)); ok {
+		return rf(ctx, minLat, maxLat, minLon, maxLon, extraStatuses)
+	}
+
+	var r0 []model.RequestPoint
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.RequestPoint)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewITaskRepository creates a new instance of ITaskRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewITaskRepository(t interface {
 	mock.TestingT

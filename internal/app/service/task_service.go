@@ -53,6 +53,9 @@ type ITaskService interface {
 	// decision on the level waiting for them; APPROVE moves to the next
 	// level or completes the task.
 	Approve(ctx context.Context, taskID string, actorID int64, req dto.TaskActionRequest) (err error)
+	// GetNearbyRequests is GET /v1/task/nearby (local §8): active requests
+	// of all staff around a point, nearest first.
+	GetNearbyRequests(ctx context.Context, req dto.NearbyRequestGet) (res []dto.NearbyRequestResponseGet, err error)
 }
 
 type TaskService struct {

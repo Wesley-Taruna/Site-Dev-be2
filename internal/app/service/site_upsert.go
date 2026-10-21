@@ -118,6 +118,21 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 		siteContext, competitors, notes = siteContextRows(site.SiteID, *req.Context, actorID, time.Now())
 	}
 
+	// duplicate check (local §8): before the transaction, so a 409 holds no
+	// transaction open; off by default
+	var duplicates []dto.NearbyRequestResponseGet
+	dupOutcome := duplicateNone
+	if status == constants.TaskStatusSubmited && s.duplicateCheck.mode == constants.DuplicateCheckConfirm && !(site.SiteLat == 0 && site.SiteLon == 0) {
+		if duplicates, err = s.taskService.nearbyActive(ctx, site.SiteLat, site.SiteLon, s.duplicateCheck.radiusM, site.SiteID); err != nil {
+			return
+		}
+		dupOutcome = decideDuplicate(s.duplicateCheck.mode, len(duplicates), req.ConfirmDuplicate)
+		if dupOutcome == duplicateBlock {
+			err = &DuplicateNearbyError{RadiusM: s.duplicateCheck.radiusM, Items: duplicates}
+			return
+		}
+	}
+
 	var taskID string
 	err = s.RepositoryTransaction.Do(ctx, func(ctx context.Context) error {
 		if err := s.RepositorySite.Upsert(ctx, &site); err != nil {
@@ -163,6 +178,11 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 		if status == constants.TaskStatusSubmited {
 			if taskFound && site.CreatedBy != actorID {
 				return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("Hanya pembuat site %s yang bisa submit", site.SiteName1))
+			}
+			if dupOutcome == duplicateConfirm {
+				if err := w.recordHistory(ctx, taskID, constants.TaskActionDuplicateConfirmed, actorID, duplicateConfirmedNotes(s.duplicateCheck.radiusM, duplicates)); err != nil {
+					return err
+				}
 			}
 			// submitTask refuses a task that is not DRAFT/REVISION
 			return w.submitTask(ctx, taskID, actorID, notesOrDefault(req.Notes, fmt.Sprintf("Site diajukan oleh %s untuk proses approval", actorName)))

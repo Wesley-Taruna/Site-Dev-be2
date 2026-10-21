@@ -27,6 +27,10 @@ type ITaskRepository interface {
 	// UpdateStatus changes only the given columns (TaskStatus, UpdatedBy,
 	// UpdatedAt).
 	UpdateStatus(ctx context.Context, taskID string, updates map[string]interface{}) (err error)
+	// GetActiveRequestPoints returns sites inside the box whose task is
+	// WAITING_* or one of extraStatuses (box only; the caller checks the
+	// exact distance).
+	GetActiveRequestPoints(ctx context.Context, minLat float64, maxLat float64, minLon float64, maxLon float64, extraStatuses []string) (points []model.RequestPoint, err error)
 }
 
 type TaskRepository struct {
@@ -204,6 +208,27 @@ func (r *TaskRepository) UpdateStatus(ctx context.Context, taskID string, update
 	db := writeDB(ctx, r.opt)
 
 	if err = db.Model(new(model.Task)).Where("TaskID = ?", taskID).Updates(updates).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *TaskRepository) GetActiveRequestPoints(ctx context.Context, minLat float64, maxLat float64, minLon float64, maxLon float64, extraStatuses []string) (points []model.RequestPoint, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetActiveRequestPoints")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	// "[_]" is a literal underscore in a SQL Server LIKE
+	err = db.Table("Sites").
+		Select("Sites.SiteID, Sites.SiteName1, Sites.SiteLat, Sites.SiteLon, Tasks.TaskStatus, Tasks.CreatedBy").
+		Joins("JOIN Tasks ON Tasks.SiteID = Sites.SiteID").
+		Where("Sites.SiteLat BETWEEN ? AND ? AND Sites.SiteLon BETWEEN ? AND ?", minLat, maxLat, minLon, maxLon).
+		Where("(Tasks.TaskStatus LIKE 'WAITING[_]%' OR Tasks.TaskStatus IN ?)", extraStatuses).
+		Scan(&points).Error
+	if err != nil {
 		span.RecordError(err)
 		return
 	}

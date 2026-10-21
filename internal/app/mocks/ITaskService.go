@@ -177,6 +177,21 @@ func (_m *ITaskService) Approve(ctx context.Context, taskID string, actorID int6
 	return r0
 }
 
+// GetNearbyRequests provides a mock function with given fields: ctx, req
+func (_m *ITaskService) GetNearbyRequests(ctx context.Context, req dto.NearbyRequestGet) ([]dto.NearbyRequestResponseGet, error) {
+	ret := _m.Called(ctx, req)
+
+	if rf, ok := ret.Get(0).(func(context.Context, dto.NearbyRequestGet) ([]dto.NearbyRequestResponseGet, error)); ok {
+		return rf(ctx, req)
+	}
+
+	var r0 []dto.NearbyRequestResponseGet
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]dto.NearbyRequestResponseGet)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewITaskService creates a new instance of ITaskService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewITaskService(t interface {
 	mock.TestingT

@@ -48,6 +48,10 @@ type SiteRequestUpsert struct {
 	Attachment []AttachmentItem          `json:"attachment"`
 	Notes      string                    `json:"notes"`
 	Insight    *AIInsightResponseGet     `json:"insight"`
+	// ConfirmDuplicate (local §8): the staff saw the 409 DUPLICATE_NEARBY
+	// list and still send. Only used with nearby_request.duplicate_check =
+	// "confirm".
+	ConfirmDuplicate bool `json:"confirm_duplicate"`
 }
 
 // Validate implements validation.Request (notes at most 500 characters).

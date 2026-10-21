@@ -111,3 +111,19 @@ const (
 
 // MetricKeyOrder is the order the 5 metrics are written in.
 var MetricKeyOrder = []string{MetricKeyFootTraffic, MetricKeyDemographics, MetricKeyCompetition, MetricKeyAccessibility, MetricKeyEconomic}
+
+// TaskActionDuplicateConfirmed: the staff sent although other active
+// requests are close by (local §8); the note names them.
+const TaskActionDuplicateConfirmed = "DUPLICATE_CONFIRMED"
+
+// NearbyRequestExtraStatuses are the "active" statuses besides WAITING_*
+// for "other requests nearby" (local §8): sent and not finally rejected.
+// Not DRAFT (may be abandoned), not REJECTED. (Local §8 also counted
+// REJECTED_BY_DIV_HEAD, which only exists with §5, not ported.)
+var NearbyRequestExtraStatuses = []string{TaskStatusRevision, TaskStatusCompleted}
+
+// Duplicate check on submit (config nearby_request.duplicate_check).
+const (
+	DuplicateCheckOff     = "off"     // default: submit exactly as before
+	DuplicateCheckConfirm = "confirm" // 409 unless confirm_duplicate = true
+)

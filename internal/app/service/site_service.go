@@ -41,6 +41,8 @@ type SiteService struct {
 	RepositoryUser          repository.IUserRepository
 	RepositoryTransaction   repository.ITransactionRepository
 	taskService             *TaskService
+	// duplicateCheck: other requests close by on submit (local §8)
+	duplicateCheck duplicateCheckConfig
 }
 
 func NewSiteService() ISiteService {
@@ -54,6 +56,7 @@ func NewSiteService() ISiteService {
 		RepositoryUser:          repository.NewUserRepository(),
 		RepositoryTransaction:   repository.NewTransactionRepository(),
 		taskService:             newTaskService(),
+		duplicateCheck:          loadDuplicateCheckConfig(global.Setup.Common.Env),
 	}
 }
 
