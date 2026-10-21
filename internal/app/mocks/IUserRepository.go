@@ -1,6 +1,6 @@
-// Written by hand in the layout mockery (v2) generates, because mockery is
-// not installed on this machine. Regenerate with mockery once it is
-// (see README "Testing"); the type and constructor names stay the same.
+// Written in the layout mockery (v2) generates, because mockery is not
+// installed on this machine. Regenerate with mockery once it is (see
+// README "Testing"); the type and constructor names stay the same.
 
 package mocks
 
@@ -20,6 +20,10 @@ type IUserRepository struct {
 // GetByID provides a mock function with given fields: ctx, userID
 func (_m *IUserRepository) GetByID(ctx context.Context, userID int64) (*model.User, error) {
 	ret := _m.Called(ctx, userID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64) (*model.User, error)); ok {
+		return rf(ctx, userID)
+	}
 
 	var r0 *model.User
 	if ret.Get(0) != nil {

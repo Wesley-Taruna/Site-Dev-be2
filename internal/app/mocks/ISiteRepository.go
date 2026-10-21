@@ -1,6 +1,6 @@
-// Written by hand in the layout mockery (v2) generates, because mockery is
-// not installed on this machine. Regenerate with mockery once it is
-// (see README "Testing"); the type and constructor names stay the same.
+// Written in the layout mockery (v2) generates, because mockery is not
+// installed on this machine. Regenerate with mockery once it is (see
+// README "Testing"); the type and constructor names stay the same.
 
 package mocks
 
@@ -21,6 +21,10 @@ type ISiteRepository struct {
 func (_m *ISiteRepository) GetByIDs(ctx context.Context, siteIDs []string) ([]*model.Site, error) {
 	ret := _m.Called(ctx, siteIDs)
 
+	if rf, ok := ret.Get(0).(func(context.Context, []string) ([]*model.Site, error)); ok {
+		return rf(ctx, siteIDs)
+	}
+
 	var r0 []*model.Site
 	if ret.Get(0) != nil {
 		r0 = ret.Get(0).([]*model.Site)
@@ -32,9 +36,43 @@ func (_m *ISiteRepository) GetByIDs(ctx context.Context, siteIDs []string) ([]*m
 func (_m *ISiteRepository) GetIDsBySearch(ctx context.Context, search string) ([]string, error) {
 	ret := _m.Called(ctx, search)
 
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]string, error)); ok {
+		return rf(ctx, search)
+	}
+
 	var r0 []string
 	if ret.Get(0) != nil {
 		r0 = ret.Get(0).([]string)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetByID provides a mock function with given fields: ctx, siteID
+func (_m *ISiteRepository) GetByID(ctx context.Context, siteID string) (*model.Site, error) {
+	ret := _m.Called(ctx, siteID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*model.Site, error)); ok {
+		return rf(ctx, siteID)
+	}
+
+	var r0 *model.Site
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.Site)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetAttachmentsBySiteID provides a mock function with given fields: ctx, siteID
+func (_m *ISiteRepository) GetAttachmentsBySiteID(ctx context.Context, siteID string) ([]*model.SiteAttachment, error) {
+	ret := _m.Called(ctx, siteID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, string) ([]*model.SiteAttachment, error)); ok {
+		return rf(ctx, siteID)
+	}
+
+	var r0 []*model.SiteAttachment
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.SiteAttachment)
 	}
 	return r0, ret.Error(1)
 }

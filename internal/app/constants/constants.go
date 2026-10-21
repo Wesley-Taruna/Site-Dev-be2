@@ -39,3 +39,46 @@ const (
 	RoleDeptHead = "DEPT_HEAD"
 	RoleDivHead  = "DIV_HEAD"
 )
+
+// ApprovalDET.Status values.
+const (
+	ApprovalDetailStatusWaiting  = "WAITING"
+	ApprovalDetailStatusPending  = "PENDING"
+	ApprovalDetailStatusApproved = "APPROVED"
+	ApprovalDetailStatusRejected = "REJECTED"
+	ApprovalDetailStatusRevision = "REVISION"
+)
+
+// ApprovalHDR.OverallStatus values.
+const (
+	ApprovalOverallStatusPending  = "PENDING"
+	ApprovalOverallStatusApproved = "APPROVED"
+	ApprovalOverallStatusRejected = "REJECTED"
+	ApprovalOverallStatusRevision = "REVISION"
+)
+
+// SiteContexts.ParkingAvailability values.
+const (
+	ParkingAvailable = "AVAILABLE"
+	ParkingLimited   = "LIMITED"
+	ParkingNone      = "NONE"
+)
+
+// ID prefixes: Sites.SiteID = "ST" + YYYYMMDD + 6 digits, Tasks.TaskID =
+// "TS" + YYYYMMDD + 6 digits.
+const (
+	SiteIDPrefix = "ST"
+	TaskIDPrefix = "TS"
+)
+
+// SiteListRequestStatuses is every task status shown on the "Site Request"
+// table (GET /v1/task/site-list): all except APPROVED.
+var SiteListRequestStatuses = []string{
+	TaskStatusDraft,
+	TaskStatusSubmited,
+	TaskStatusWaiting(RoleDeptHead),
+	TaskStatusWaiting(RoleDivHead),
+	TaskStatusRejected,
+	TaskStatusRevision,
+	TaskStatusCompleted,
+}

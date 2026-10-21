@@ -28,3 +28,10 @@ func (m *Task) MarshalJSON() ([]byte, error) {
 		Alias: (*Alias)(m),
 	})
 }
+
+// TaskStatusCount is one row of "SELECT TaskStatus, COUNT(1) ... GROUP BY
+// TaskStatus" (not a table).
+type TaskStatusCount struct {
+	TaskStatus string `gorm:"column:TaskStatus" json:"task_status"`
+	Count      int64  `gorm:"column:Count" json:"count"`
+}

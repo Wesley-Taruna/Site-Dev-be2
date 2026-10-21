@@ -16,6 +16,9 @@ type ISiteRepository interface {
 	// GetIDsBySearch returns the SiteIDs whose ID, names or address lines
 	// contain search (LIKE '%search%').
 	GetIDsBySearch(ctx context.Context, search string) (siteIDs []string, err error)
+	GetByID(ctx context.Context, siteID string) (site *model.Site, err error)
+	// GetAttachmentsBySiteID returns a site's attachments, oldest first.
+	GetAttachmentsBySiteID(ctx context.Context, siteID string) (attachments []*model.SiteAttachment, err error)
 }
 
 type SiteRepository struct {
@@ -58,6 +61,36 @@ func (r *SiteRepository) GetIDsBySearch(ctx context.Context, search string) (sit
 			like, like, like, like, like, like).
 		Pluck("SiteID", &siteIDs).Error
 	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetByID(ctx context.Context, siteID string) (site *model.Site, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetByID")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	site = &model.Site{}
+	if err = db.Where("SiteID = ?", siteID).First(site).Error; err != nil {
+		span.RecordError(err)
+		site = nil
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetAttachmentsBySiteID(ctx context.Context, siteID string) (attachments []*model.SiteAttachment, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetAttachmentsBySiteID")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	if err = db.Where("SiteID = ?", siteID).Order("SiteAttachmentID ASC").Find(&attachments).Error; err != nil {
 		span.RecordError(err)
 		return
 	}
