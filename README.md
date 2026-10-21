@@ -1,5 +1,5 @@
-# Boilerplate API
-Go Language-Based Boilerplate for Microservices with clean architecture 🚀
+# Site Dev Backend
+Backend of the Site Development module (site survey, AI location insight, approval), rebuilt on the FamilyMart Go boilerplate (`boilerplate-backendgo`). Same API as `site-dev-api`; structure and rules follow the boilerplate below.
 
 ## Contents
 - [Requirement](#requirement)
