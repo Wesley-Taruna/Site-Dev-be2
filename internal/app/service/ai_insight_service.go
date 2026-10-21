@@ -51,6 +51,8 @@ type AIInsightService struct {
 	RepositoryQuota         repository.IQuotaRepository
 	RepositoryTransaction   repository.ITransactionRepository
 	ClientGemini            client.IGeminiClient
+	// ServicesNearby feeds measured map data into the prompt (local §6)
+	ServicesNearby INearbyPlaceService
 }
 
 func NewAIInsightService() IAIInsightService {
@@ -62,6 +64,7 @@ func NewAIInsightService() IAIInsightService {
 		RepositoryQuota:         repository.NewQuotaRepository(),
 		RepositoryTransaction:   repository.NewTransactionRepository(),
 		ClientGemini:            global.Setup.Clients.Gemini,
+		ServicesNearby:          NewNearbyPlaceService(),
 	}
 }
 
@@ -109,10 +112,12 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 		}
 	}
 
+	in.Measured = s.measuredFor(ctx, site.SiteLat, site.SiteLon)
 	insight, geminiModel, err := s.ClientGemini.GenerateInsight(ctx, in)
 	if err != nil {
 		return
 	}
+	s.markDataSource(&insight, in.Measured)
 
 	var row *model.SiteAIInsight
 	if row, err = s.persist(ctx, &insight, geminiModel, actorID); err != nil {
@@ -389,7 +394,11 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 		}
 	}
 
+	in.Measured = s.measuredFor(ctx, in.Site.SiteLat, in.Site.SiteLon)
 	res, _, err = s.ClientGemini.GenerateInsight(ctx, in)
+	if err == nil {
+		s.markDataSource(&res, in.Measured)
+	}
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
@@ -442,4 +451,29 @@ func (s *AIInsightService) useQuota(ctx context.Context, actorID int64) error {
 		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("Kuota generate AI insight harian (%d) sudah habis, coba lagi besok.", limit))
 	}
 	return err
+}
+
+// measuredFor is the nearby map data for the prompt (local §6). Best
+// effort: off, no point, or any failure = the original prompt.
+func (s *AIInsightService) measuredFor(ctx context.Context, lat float64, lng float64) *dto.NearbyMeasured {
+	if s.ServicesNearby == nil || !s.ServicesNearby.Enabled() || (lat == 0 && lng == 0) {
+		return nil
+	}
+	m, err := s.ServicesNearby.Measured(ctx, lat, lng)
+	if err != nil {
+		s.opt.Logger.AddMessage(log.ErrorLevel, fmt.Errorf("ai_insight_service: nearby data skipped for %.5f,%.5f: %w", lat, lng, err)).Print()
+		return nil
+	}
+	return m
+}
+
+// markDataSource adds data_source/measured to a fresh insight, only while
+// the nearby feature is on, so with [places] off the answer stays exactly
+// site-dev-api's (local §6 always sent "gemini").
+func (s *AIInsightService) markDataSource(insight *dto.AIInsightResponseGet, measured *dto.NearbyMeasured) {
+	if s.ServicesNearby == nil || !s.ServicesNearby.Enabled() {
+		return
+	}
+	insight.DataSource = insightDataSource(measured)
+	insight.Measured = measured
 }

@@ -38,6 +38,9 @@ type ISiteRepository interface {
 	// ReplaceAttachments deletes the site's attachments and inserts the new
 	// list.
 	ReplaceAttachments(ctx context.Context, siteID string, attachments []*model.SiteAttachment) (err error)
+	// GetActiveStorePoints is the active stores with their code (nearest
+	// FamilyMart, local §6); a separate query so /maps stays the same.
+	GetActiveStorePoints(ctx context.Context) (stores []model.StoreMap, err error)
 }
 
 type SiteRepository struct {
@@ -336,6 +339,29 @@ func (r *SiteRepository) ReplaceAttachments(ctx context.Context, siteID string, 
 		return
 	}
 	if err = db.Create(&attachments).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+// activeStorePointQuery is local §6's query (2191e07), unchanged.
+const activeStorePointQuery = `
+	SELECT
+		ms.StoreCode,
+		ms.StoreName,
+		ms.Longitude,
+		ms.Latitude
+	FROM AMFIBI_MASTER.dbo.MStore as ms
+	WHERE ms.Longitude != 0 and ms.IsActive = 1 and ms.StoreName != 'FOODTRUCK 1'
+`
+
+func (r *SiteRepository) GetActiveStorePoints(ctx context.Context) (stores []model.StoreMap, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetActiveStorePoints")
+	defer span.End()
+
+	if err = readDB(ctx, r.opt).Raw(activeStorePointQuery).Scan(&stores).Error; err != nil {
 		span.RecordError(err)
 		return
 	}

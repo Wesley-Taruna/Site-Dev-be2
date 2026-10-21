@@ -195,6 +195,21 @@ func (_m *ISiteRepository) ReplaceAttachments(ctx context.Context, siteID string
 	return r0
 }
 
+// GetActiveStorePoints provides a mock function with given fields: ctx
+func (_m *ISiteRepository) GetActiveStorePoints(ctx context.Context) ([]model.StoreMap, error) {
+	ret := _m.Called(ctx)
+
+	if rf, ok := ret.Get(0).(func(context.Context) ([]model.StoreMap, error)); ok {
+		return rf(ctx)
+	}
+
+	var r0 []model.StoreMap
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.StoreMap)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewISiteRepository creates a new instance of ISiteRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteRepository(t interface {
 	mock.TestingT
