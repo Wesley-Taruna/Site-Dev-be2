@@ -42,6 +42,10 @@ type IApprovalRepository interface {
 	// UpdateDetailIfPending changes a level only while it is still PENDING
 	// (two approvers acting at once); rows 0 = someone acted already.
 	UpdateDetailIfPending(ctx context.Context, id uint, updates map[string]interface{}) (rows int64, err error)
+	// GetDecisionRolesByTaskIDs lists, oldest decision first, the role of
+	// every level of these tasks (all rounds) whose status is one of
+	// statuses (November scope: rejected_by_role).
+	GetDecisionRolesByTaskIDs(ctx context.Context, taskIDs []string, statuses []string) (rows []model.TaskDecisionRole, err error)
 }
 
 type ApprovalRepository struct {
@@ -294,6 +298,28 @@ func (r *ApprovalRepository) UpdateDetailIfPending(ctx context.Context, id uint,
 		Where("ID = ? AND Status = ?", id, constants.ApprovalDetailStatusPending).
 		Updates(updates)
 	rows, err = tx.RowsAffected, tx.Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetDecisionRolesByTaskIDs(ctx context.Context, taskIDs []string, statuses []string) (rows []model.TaskDecisionRole, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetDecisionRolesByTaskIDs")
+	defer span.End()
+
+	if len(taskIDs) == 0 {
+		return
+	}
+	err = readDB(ctx, r.opt).
+		Table("ApprovalDET").
+		Select("ApprovalHDR.TaskID, ApprovalDET.ApproverRoleID, ApprovalDET.ActedAt").
+		Joins("JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID").
+		Where("ApprovalHDR.TaskID IN ? AND ApprovalDET.Status IN ?", taskIDs, statuses).
+		Order("ApprovalDET.ActedAt ASC").
+		Find(&rows).Error
 	if err != nil {
 		span.RecordError(err)
 		return

@@ -215,6 +215,21 @@ func (_m *IApprovalRepository) UpdateDetailIfPending(ctx context.Context, id uin
 	return ret.Get(0).(int64), ret.Error(1)
 }
 
+// GetDecisionRolesByTaskIDs provides a mock function with given fields: ctx, taskIDs, statuses
+func (_m *IApprovalRepository) GetDecisionRolesByTaskIDs(ctx context.Context, taskIDs []string, statuses []string) ([]model.TaskDecisionRole, error) {
+	ret := _m.Called(ctx, taskIDs, statuses)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string, []string) ([]model.TaskDecisionRole, error)); ok {
+		return rf(ctx, taskIDs, statuses)
+	}
+
+	var r0 []model.TaskDecisionRole
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.TaskDecisionRole)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewIApprovalRepository creates a new instance of IApprovalRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewIApprovalRepository(t interface {
 	mock.TestingT

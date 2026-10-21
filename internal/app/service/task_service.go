@@ -167,9 +167,49 @@ func (s *TaskService) withSites(ctx context.Context, tasks []*model.Task) (res [
 		siteByID[site.SiteID] = site
 	}
 
+	var rejectedBy map[string]string
+	if rejectedBy, err = s.rejectedByRoles(ctx, tasks); err != nil {
+		return
+	}
+
 	res = make([]dto.TaskResponseGet, 0, len(tasks))
 	for _, task := range tasks {
-		res = append(res, toTaskResponse(task, siteByID[task.SiteID]))
+		row := toTaskResponse(task, siteByID[task.SiteID])
+		row.RejectedByRole = rejectedBy[task.TaskID]
+		res = append(res, row)
+	}
+	return
+}
+
+// returnedStatuses are the task statuses that have a "returned by" role,
+// with the level status that caused each.
+var returnedStatuses = map[string]string{
+	constants.TaskStatusRevision: constants.ApprovalDetailStatusRevision,
+	constants.TaskStatusRejected: constants.ApprovalDetailStatusRejected,
+}
+
+// rejectedByRoles maps task ID -> role of the level that returned (REVISION)
+// or rejected it, for the tasks now in such a status (November scope,
+// prototype rejected_by_role). One query, only when such a task is listed.
+func (s *TaskService) rejectedByRoles(ctx context.Context, tasks []*model.Task) (res map[string]string, err error) {
+	var taskIDs []string
+	for _, t := range tasks {
+		if _, ok := returnedStatuses[t.TaskStatus]; ok {
+			taskIDs = append(taskIDs, t.TaskID)
+		}
+	}
+	if len(taskIDs) == 0 {
+		return
+	}
+
+	var rows []model.TaskDecisionRole
+	rows, err = s.RepositoryApproval.GetDecisionRolesByTaskIDs(ctx, taskIDs, []string{constants.ApprovalDetailStatusRevision, constants.ApprovalDetailStatusRejected})
+	if err != nil {
+		return
+	}
+	res = make(map[string]string, len(taskIDs))
+	for _, row := range rows { // oldest first: the newest decision wins
+		res[row.TaskID] = row.ApproverRoleID
 	}
 	return
 }
@@ -259,8 +299,9 @@ func (s *TaskService) detail(ctx context.Context, id string) (res dto.TaskDetail
 		res.Site.UpdatedByName = usernameOf(ctx, s.RepositoryUser, *site.UpdatedBy)
 	}
 	res.Task = dto.TaskDetailTaskSection{
-		TaskID:     task.TaskID,
-		TaskStatus: task.TaskStatus,
+		TaskID:      task.TaskID,
+		TaskStatus:  task.TaskStatus,
+		SubmitCount: task.SubmitCount,
 	}
 
 	// the on-site survey is optional: never filled in = null, not an error
@@ -299,7 +340,11 @@ func (s *TaskService) detail(ctx context.Context, id string) (res dto.TaskDetail
 		if err != nil {
 			return
 		}
+		levelStatus, returned := returnedStatuses[task.TaskStatus]
 		for _, d := range details {
+			if returned && d.Status == levelStatus {
+				res.Task.RejectedByRole = d.ApproverRoleID // the newest round holds the decision
+			}
 			res.Task.Approval = append(res.Task.Approval, dto.TaskDetailApprovalItem{
 				ID:             d.ID,
 				Level:          d.Level,
@@ -498,6 +543,7 @@ func (s *TaskService) GetPendingApprovals(ctx context.Context, req dto.ListReque
 			Level:            d.Level,
 			SubmittedAt:      row.header.SubmittedAt,
 			CreatedAt:        row.task.CreatedAt,
+			SubmitCount:      row.task.SubmitCount,
 		})
 	}
 
@@ -519,6 +565,7 @@ func (s *TaskService) GetApprovalHistory(ctx context.Context, req dto.ListReques
 	}
 
 	res = make([]dto.ApprovalHistoryResponseGet, 0, len(details))
+	var tasks []*model.Task
 	for _, d := range details {
 		var row approvalRow
 		row, err = s.approvalRowOf(ctx, d)
@@ -545,6 +592,18 @@ func (s *TaskService) GetApprovalHistory(ctx context.Context, req dto.ListReques
 			ActedAt:          d.ActedAt,
 			CreatedAt:        row.task.CreatedAt,
 		})
+		tasks = append(tasks, row.task)
+	}
+
+	var rejectedBy map[string]string
+	if rejectedBy, err = s.rejectedByRoles(ctx, tasks); err != nil {
+		span.RecordError(err)
+		s.opt.Logger.AddMessage(log.ErrorLevel, err)
+		res, total = nil, 0
+		return
+	}
+	for i := range res {
+		res[i].RejectedByRole = rejectedBy[res[i].TaskID]
 	}
 
 	return

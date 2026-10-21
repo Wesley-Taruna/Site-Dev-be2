@@ -71,25 +71,33 @@ func toSiteContextResponse(m *model.SiteContext, competitors []*model.SiteCompet
 }
 
 func toTaskHistoryResponse(m *model.TaskHistory) dto.TaskHistoryResponseGet {
-	return dto.TaskHistoryResponseGet{
+	res := dto.TaskHistoryResponseGet{
 		ID:        m.ID,
 		Action:    m.Action,
 		ActorID:   m.ActorID,
 		Notes:     m.Notes,
 		CreatedAt: m.CreatedAt,
 	}
+	if m.ActorRole != nil {
+		res.ActorRole = *m.ActorRole
+	}
+	if m.Round != nil {
+		res.Round = *m.Round
+	}
+	return res
 }
 
 // toTaskResponse is site-dev-api's dto.ToTaskResp (site may be nil).
 func toTaskResponse(task *model.Task, site *model.Site) dto.TaskResponseGet {
 	row := dto.TaskResponseGet{
-		TaskID:     task.TaskID,
-		SiteID:     task.SiteID,
-		TaskStatus: task.TaskStatus,
-		CreatedBy:  task.CreatedBy,
-		UpdatedBy:  task.UpdatedBy,
-		CreatedAt:  task.CreatedAt,
-		UpdatedAt:  task.UpdatedAt,
+		TaskID:      task.TaskID,
+		SiteID:      task.SiteID,
+		TaskStatus:  task.TaskStatus,
+		CreatedBy:   task.CreatedBy,
+		UpdatedBy:   task.UpdatedBy,
+		CreatedAt:   task.CreatedAt,
+		UpdatedAt:   task.UpdatedAt,
+		SubmitCount: task.SubmitCount,
 	}
 	if site != nil {
 		row.SiteName1 = site.SiteName1

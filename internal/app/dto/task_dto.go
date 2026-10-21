@@ -36,6 +36,11 @@ type TaskResponseGet struct {
 	UpdatedBy    int64     `json:"updated_by"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	// November scope (API-CHANGES §13.3, prototype TaskResp): submit round
+	// (> 1 = "Pernah dikirim sebelumnya") and, for REVISION/REJECTED, the
+	// role that returned it. omitempty: answers on old data stay the same.
+	SubmitCount    int    `json:"submit_count,omitempty"`
+	RejectedByRole string `json:"rejected_by_role,omitempty"`
 }
 
 // TaskHistoryResponseGet is one row of GET /v1/task/:id/history. JSON names
@@ -46,6 +51,10 @@ type TaskHistoryResponseGet struct {
 	ActorID   int64     `json:"actor_id"`
 	Notes     string    `json:"notes"`
 	CreatedAt time.Time `json:"created_at"`
+	// November scope (API-CHANGES §13.3): role at that moment and submit
+	// round; left out on rows written before the change (NULL).
+	ActorRole string `json:"actor_role,omitempty"`
+	Round     int    `json:"round,omitempty"`
 }
 
 // TaskStatusCountResponseGet is one row of GET /v1/task/status/count and
@@ -86,6 +95,9 @@ type TaskDetailTaskSection struct {
 	TaskStatus string                   `json:"task_status"`
 	Approval   []TaskDetailApprovalItem `json:"approval"`
 	History    []TaskHistoryResponseGet `json:"history"`
+	// November scope, as TaskResponseGet
+	SubmitCount    int    `json:"submit_count,omitempty"`
+	RejectedByRole string `json:"rejected_by_role,omitempty"`
 }
 
 // TaskDetailResponseGet is GET /v1/task/:id (site-dev-api

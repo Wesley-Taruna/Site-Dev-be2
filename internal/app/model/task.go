@@ -13,6 +13,10 @@ type Task struct {
 	UpdatedBy  int64     `gorm:"column:UpdatedBy" json:"updated_by"`
 	CreatedAt  time.Time `gorm:"column:CreatedAt" json:"created_at"`
 	UpdatedAt  time.Time `gorm:"column:UpdatedAt" json:"updated_at"`
+	// SubmitCount is the submit round: 1 for a new task, + 1 on every
+	// resubmit after REVISION (November scope, API-CHANGES §13.3; new
+	// column, needs DB owner: plan §8).
+	SubmitCount int `gorm:"column:SubmitCount" json:"submit_count"`
 }
 
 func (Task) TableName() string {

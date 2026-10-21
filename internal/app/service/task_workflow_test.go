@@ -49,7 +49,7 @@ func TestSubmitTask_NoActiveMatrix(t *testing.T) {
 	m.task.On("GetByID", ctxAny, "TS1").Return(&model.Task{TaskID: "TS1", TaskStatus: constants.TaskStatusRevision}, nil)
 	m.matrix.On("GetActiveChain", ctxAny).Return(nil, nil)
 
-	err := w.submitTask(context.Background(), "TS1", 1001, "n")
+	err := w.submitTask(context.Background(), "TS1", 1001, "USER", "n")
 
 	assert.EqualError(t, err, "task_service: no active approval matrix configured")
 	m.approval.AssertNotCalled(t, "CreateHeader")

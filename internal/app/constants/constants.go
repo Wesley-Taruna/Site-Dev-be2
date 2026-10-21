@@ -46,6 +46,9 @@ const (
 	// releases it again
 	TaskActionHold    = "HOLD"
 	TaskActionRelease = "RELEASE"
+	// November scope (API-CHANGES §13.3): staff send a REVISION task again
+	// (was a second SUBMIT)
+	TaskActionResubmit = "RESUBMIT"
 )
 
 // Role IDs stored in Users.RoleID / Roles.RoleID. RoleUser (site staff) is

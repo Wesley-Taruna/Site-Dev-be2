@@ -22,6 +22,9 @@ type PendingApprovalResponseGet struct {
 	Level            int       `json:"level"`
 	SubmittedAt      time.Time `json:"submitted_at"`
 	CreatedAt        time.Time `json:"created_at"`
+	// November scope (API-CHANGES §13.3): submit round, > 1 = "Pernah
+	// dikirim sebelumnya"
+	SubmitCount int `json:"submit_count,omitempty"`
 }
 
 // ApprovalHistoryResponseGet is one row of GET /v1/task/approval-history
@@ -42,6 +45,9 @@ type ApprovalHistoryResponseGet struct {
 	Notes            string     `json:"notes"`
 	ActedAt          *time.Time `json:"acted_at"`
 	CreatedAt        time.Time  `json:"created_at"`
+	// November scope (prototype 21 Oct): for a task now REVISION/REJECTED,
+	// the role that returned it
+	RejectedByRole string `json:"rejected_by_role,omitempty"`
 }
 
 // TaskActionRequest is the body of POST /v1/task/:id/approve: decision

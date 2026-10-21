@@ -166,7 +166,7 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 		}
 
 		if !taskFound {
-			created, err := w.createTask(ctx, site.SiteID, actorID, notesOrDefault(req.Notes, fmt.Sprintf("Site baru dibuat oleh %s", actorName)))
+			created, err := w.createTask(ctx, site.SiteID, actorID, actor.RoleID, notesOrDefault(req.Notes, fmt.Sprintf("Site baru dibuat oleh %s", actorName)))
 			if err != nil {
 				return err
 			}
@@ -174,18 +174,23 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 		} else {
 			taskID = existingTask.TaskID
 		}
+		meta := historyMeta{role: actor.RoleID, round: roundOf(existingTask)}
 
 		if status == constants.TaskStatusSubmited {
 			if taskFound && site.CreatedBy != actorID {
 				return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("Hanya pembuat site %s yang bisa submit", site.SiteName1))
 			}
 			if dupOutcome == duplicateConfirm {
-				if err := w.recordHistory(ctx, taskID, constants.TaskActionDuplicateConfirmed, actorID, duplicateConfirmedNotes(s.duplicateCheck.radiusM, duplicates)); err != nil {
+				dupMeta := meta
+				if taskFound && existingTask.TaskStatus == constants.TaskStatusRevision {
+					dupMeta.round++ // belongs to the round the resubmit opens
+				}
+				if err := w.recordHistory(ctx, taskID, constants.TaskActionDuplicateConfirmed, actorID, dupMeta, duplicateConfirmedNotes(s.duplicateCheck.radiusM, duplicates)); err != nil {
 					return err
 				}
 			}
 			// submitTask refuses a task that is not DRAFT/REVISION
-			return w.submitTask(ctx, taskID, actorID, notesOrDefault(req.Notes, fmt.Sprintf("Site diajukan oleh %s untuk proses approval", actorName)))
+			return w.submitTask(ctx, taskID, actorID, actor.RoleID, notesOrDefault(req.Notes, fmt.Sprintf("Site diajukan oleh %s untuk proses approval", actorName)))
 		}
 
 		// DRAFT: never move a task back once it was sent; REVISION stays
@@ -197,7 +202,7 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 			if site.CreatedBy != actorID {
 				return echo.NewHTTPError(http.StatusForbidden, fmt.Sprintf("Hanya pembuat site %s yang bisa update", site.SiteName1))
 			}
-			return w.recordHistory(ctx, taskID, constants.TaskActionUpdate, actorID, notesOrDefault(req.Notes, fmt.Sprintf("Data site diperbarui oleh %s", actorName)))
+			return w.recordHistory(ctx, taskID, constants.TaskActionUpdate, actorID, meta, notesOrDefault(req.Notes, fmt.Sprintf("Data site diperbarui oleh %s", actorName)))
 		}
 		return nil
 	})

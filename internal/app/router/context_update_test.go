@@ -51,7 +51,7 @@ func TestSideBySide_UpdateContext(t *testing.T) {
 		`INSERT INTO "SiteCompetitors" ("SiteID","CompetitorName","CompetitorType","Distance","CreatedAt") OUTPUT INSERTED."ID" VALUES ('ST1','Indomaret','minimarket','50m','<time>'),('ST1','Alfamart','','','<time>');`,
 		`DELETE FROM "SiteCustomNotes" WHERE SiteID = 'ST1'`,
 		`INSERT INTO "SiteCustomNotes" ("SiteID","Title","Content","CreatedAt") OUTPUT INSERTED."ID" VALUES ('ST1','Banjir','tidak','<time>');`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt") OUTPUT INSERTED."ID" VALUES ('TS1','UPDATE',1001,'Konteks on-site diperbarui oleh andi','<time>');`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','UPDATE',1001,'Konteks on-site diperbarui oleh andi','<time>','USER',1);`,
 	}, stableSQL(rec.sqls))
 	q := fdb.Queries()
 	assert.Equal(t, "BEGIN", q[3], "the four writes are one transaction")

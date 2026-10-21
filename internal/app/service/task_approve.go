@@ -111,12 +111,15 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 		actorUsername = actor.Username
 	}
 
+	// history: the role of the level decided on, in the task's round
+	meta := historyMeta{role: detail.ApproverRoleID, round: roundOf(task)}
+
 	var notifyNext *model.ApprovalDetail
 	err = s.RepositoryTransaction.Do(ctx, func(ctx context.Context) error {
 		now := time.Now()
 
 		if req.Decision == constants.TaskActionRelease {
-			return s.release(ctx, w, taskID, actorID, detail, req.Notes, actorUsername, now)
+			return s.release(ctx, w, taskID, actorID, detail, req.Notes, actorUsername, meta, now)
 		}
 
 		detailUpdates := map[string]interface{}{
@@ -152,7 +155,7 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			historyAction = constants.TaskActionHold
 		}
 		historyNotes := approvalHistoryMessage(req.Decision, actorUsername, w.roleNameOf(ctx, detail.ApproverRoleID), req.Notes)
-		if err := w.recordHistory(ctx, taskID, historyAction, actorID, historyNotes); err != nil {
+		if err := w.recordHistory(ctx, taskID, historyAction, actorID, meta, historyNotes); err != nil {
 			return err
 		}
 
@@ -203,7 +206,7 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			}); err != nil {
 				return err
 			}
-			return w.recordHistory(ctx, taskID, constants.TaskActionComplete, actorID, "Task Complete")
+			return w.recordHistory(ctx, taskID, constants.TaskActionComplete, actorID, meta, "Task Complete")
 		}
 
 		// next level = the smallest level above this one (levels come from
@@ -238,7 +241,7 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 		}
 
 		forwardNotes := fmt.Sprintf("Approval diteruskan ke %s, status PENDING", w.roleNameOf(ctx, next.ApproverRoleID))
-		if err := w.recordHistory(ctx, taskID, constants.TaskActionForward, actorID, forwardNotes); err != nil {
+		if err := w.recordHistory(ctx, taskID, constants.TaskActionForward, actorID, meta, forwardNotes); err != nil {
 			return err
 		}
 
@@ -259,7 +262,7 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 // release takes a held level back to PENDING (acted_at and reason cleared,
 // as the prototype does) and the task back to WAITING_<ROLE>; then the
 // approver decides normally. No e-mail: the approver was told already.
-func (s *TaskService) release(ctx context.Context, w *taskWorkflow, taskID string, actorID int64, detail *model.ApprovalDetail, notes string, actorUsername string, now time.Time) error {
+func (s *TaskService) release(ctx context.Context, w *taskWorkflow, taskID string, actorID int64, detail *model.ApprovalDetail, notes string, actorUsername string, meta historyMeta, now time.Time) error {
 	rows, err := s.RepositoryApproval.UpdateDetailIfHeld(ctx, detail.ID, map[string]interface{}{
 		"Status":    constants.ApprovalDetailStatusPending,
 		"Notes":     "",
@@ -274,7 +277,7 @@ func (s *TaskService) release(ctx context.Context, w *taskWorkflow, taskID strin
 	}
 
 	historyNotes := approvalHistoryMessage(constants.TaskActionRelease, actorUsername, w.roleNameOf(ctx, detail.ApproverRoleID), notes)
-	if err := w.recordHistory(ctx, taskID, constants.TaskActionRelease, actorID, historyNotes); err != nil {
+	if err := w.recordHistory(ctx, taskID, constants.TaskActionRelease, actorID, meta, historyNotes); err != nil {
 		return err
 	}
 

@@ -88,7 +88,7 @@ func TestDuplicateCheck_ConfirmedSendsWithHistory(t *testing.T) {
 	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng}, "confirm_duplicate": true}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
-	assert.Contains(t, stableSQL(rec.sqls), `INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt") OUTPUT INSERTED."ID" VALUES ('TS1','DUPLICATE_CONFIRMED',1001,'Staf tetap mengirim walau ada pengajuan aktif lain dalam 200 m: ST7 Toko Lain (WAITING_DIV_HEAD, 111 m)','<time>');`)
+	assert.Contains(t, stableSQL(rec.sqls), `INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','DUPLICATE_CONFIRMED',1001,'Staf tetap mengirim walau ada pengajuan aktif lain dalam 200 m: ST7 Toko Lain (WAITING_DIV_HEAD, 111 m)','<time>','USER',1);`)
 }
 
 func TestDuplicateCheck_OffByDefault(t *testing.T) {

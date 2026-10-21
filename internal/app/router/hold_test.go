@@ -34,7 +34,7 @@ func TestHold(t *testing.T) {
 	assert.Equal(t, []string{
 		`UPDATE "ApprovalDET" SET "ActedAt"='<time>',"Notes"='tunggu zonasi',"Status"='HOLD',"UpdatedAt"='<time>' WHERE ID = 31 AND Status = 'PENDING'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DEPT_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt") OUTPUT INSERTED."ID" VALUES ('TS1','HOLD',3001,'Site ditahan (Hold Status) oleh citra (Dept Head) dengan alasan (tunggu zonasi)','<time>');`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','HOLD',3001,'Site ditahan (Hold Status) oleh citra (Dept Head) dengan alasan (tunggu zonasi)','<time>','DEPT_HEAD',1);`,
 		`UPDATE "Tasks" SET "TaskStatus"='HOLD_DEPT_HEAD',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 	}, stableSQL(rec.sqls)[4:])
 	assert.Equal(t, "COMMIT", fdb.Queries()[len(fdb.Queries())-1], "the round stays PENDING, nothing after the commit")
@@ -56,7 +56,7 @@ func TestRelease(t *testing.T) {
 		`SELECT * FROM "Users" WHERE UserID = 3001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`UPDATE "ApprovalDET" SET "ActedAt"=NULL,"Notes"='',"Status"='PENDING',"UpdatedAt"='<time>' WHERE ID = 31 AND Status = 'HOLD'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DEPT_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt") OUTPUT INSERTED."ID" VALUES ('TS1','RELEASE',3001,'Hold Status dilepas oleh citra (Dept Head)','<time>');`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','RELEASE',3001,'Hold Status dilepas oleh citra (Dept Head)','<time>','DEPT_HEAD',1);`,
 		`UPDATE "Tasks" SET "TaskStatus"='WAITING_DEPT_HEAD',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 	}, stableSQL(rec.sqls)[2:])
 }

@@ -137,12 +137,8 @@ func (s *SiteContextService) update(ctx context.Context, siteID string, req dto.
 		if err := s.RepositorySiteContext.ReplaceCustomNotes(ctx, siteID, notes); err != nil {
 			return err
 		}
-		return s.RepositoryTaskHistory.Create(ctx, &model.TaskHistory{
-			TaskID:  task.TaskID,
-			Action:  constants.TaskActionUpdate,
-			ActorID: userID,
-			Notes:   fmt.Sprintf("Konteks on-site diperbarui oleh %s", actor.Username),
-		})
+		return s.RepositoryTaskHistory.Create(ctx, newTaskHistory(task.TaskID, constants.TaskActionUpdate, userID,
+			historyMeta{role: actor.RoleID, round: roundOf(task)}, fmt.Sprintf("Konteks on-site diperbarui oleh %s", actor.Username)))
 	})
 	if err != nil {
 		return

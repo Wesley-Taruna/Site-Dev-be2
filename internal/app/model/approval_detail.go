@@ -35,3 +35,11 @@ func (m *ApprovalDetail) MarshalJSON() ([]byte, error) {
 		Alias: (*Alias)(m),
 	})
 }
+
+// TaskDecisionRole is the role that decided a level of a task's rounds
+// (query result, not a table): who returned / rejected a request.
+type TaskDecisionRole struct {
+	TaskID         string     `gorm:"column:TaskID"`
+	ApproverRoleID string     `gorm:"column:ApproverRoleID"`
+	ActedAt        *time.Time `gorm:"column:ActedAt"`
+}

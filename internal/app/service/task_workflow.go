@@ -70,33 +70,64 @@ func (w *taskWorkflow) roleNameOf(ctx context.Context, roleID string) string {
 	return role.RoleName
 }
 
+// historyMeta is the actor's role at that moment and the submit round of a
+// history row (November scope, API-CHANGES §13.3).
+type historyMeta struct {
+	role  string
+	round int
+}
+
+// roundOf is a task's current submit round (1 when unknown).
+func roundOf(task *model.Task) int {
+	if task == nil || task.SubmitCount < 1 {
+		return 1
+	}
+	return task.SubmitCount
+}
+
 // recordHistory appends one history row.
-func (w *taskWorkflow) recordHistory(ctx context.Context, taskID string, action string, actorID int64, notes string) error {
-	return w.RepositoryTaskHistory.Create(ctx, &model.TaskHistory{
+func (w *taskWorkflow) recordHistory(ctx context.Context, taskID string, action string, actorID int64, meta historyMeta, notes string) error {
+	return w.RepositoryTaskHistory.Create(ctx, newTaskHistory(taskID, action, actorID, meta, notes))
+}
+
+// newTaskHistory builds a history row; an empty role or round 0 stays NULL.
+func newTaskHistory(taskID string, action string, actorID int64, meta historyMeta, notes string) *model.TaskHistory {
+	h := &model.TaskHistory{
 		TaskID:  taskID,
 		Action:  action,
 		ActorID: actorID,
 		Notes:   notes,
-	})
+	}
+	if meta.role != "" {
+		role := meta.role
+		h.ActorRole = &role
+	}
+	if meta.round > 0 {
+		round := meta.round
+		h.Round = &round
+	}
+	return h
 }
 
-// createTask makes the DRAFT task of a new site, with its CREATE history.
-func (w *taskWorkflow) createTask(ctx context.Context, siteID string, createdBy int64, notes string) (*model.Task, error) {
+// createTask makes the DRAFT task of a new site (submit round 1), with its
+// CREATE history.
+func (w *taskWorkflow) createTask(ctx context.Context, siteID string, createdBy int64, creatorRole string, notes string) (*model.Task, error) {
 	taskID, err := w.RepositoryRunningID.NextTaskID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	task := &model.Task{
-		TaskID:     taskID,
-		SiteID:     siteID,
-		TaskStatus: constants.TaskStatusDraft,
-		CreatedBy:  createdBy,
+		TaskID:      taskID,
+		SiteID:      siteID,
+		TaskStatus:  constants.TaskStatusDraft,
+		CreatedBy:   createdBy,
+		SubmitCount: 1,
 	}
 	if err := w.RepositoryTask.Create(ctx, task); err != nil {
 		return nil, err
 	}
-	if err := w.recordHistory(ctx, taskID, constants.TaskActionCreate, createdBy, notes); err != nil {
+	if err := w.recordHistory(ctx, taskID, constants.TaskActionCreate, createdBy, historyMeta{role: creatorRole, round: 1}, notes); err != nil {
 		return nil, err
 	}
 	return task, nil
@@ -105,8 +136,10 @@ func (w *taskWorkflow) createTask(ctx context.Context, siteID string, createdBy 
 // submitTask sends a DRAFT or REVISION task for approval: a new approval
 // round with one level per active approval matrix row (by role level; the
 // first PENDING, the rest WAITING), the e-mail to the first approver, task
-// status WAITING_<first role>, SUBMIT history.
-func (w *taskWorkflow) submitTask(ctx context.Context, taskID string, submittedBy int64, notes string) error {
+// status WAITING_<first role>, SUBMIT history. From REVISION (November
+// scope, API-CHANGES §13.3) it is a resubmit: history RESUBMIT and
+// SubmitCount + 1 (the new round starts at the first level again).
+func (w *taskWorkflow) submitTask(ctx context.Context, taskID string, submittedBy int64, submitterRole string, notes string) error {
 	task, err := w.RepositoryTask.GetByID(ctx, taskID)
 	if err != nil {
 		return err
@@ -163,18 +196,24 @@ func (w *taskWorkflow) submitTask(ctx context.Context, taskID string, submittedB
 	}
 	w.notifyApprovalPending(ctx, taskID, task.SiteID, submittedBy, details[0], notes)
 
-	if err := w.RepositoryTask.UpdateStatus(ctx, taskID, map[string]interface{}{
+	action, round := constants.TaskActionSubmit, roundOf(task)
+	taskUpdates := map[string]interface{}{
 		"TaskStatus": constants.TaskStatusWaiting(chain[0].RoleID),
 		"UpdatedBy":  submittedBy,
 		"UpdatedAt":  now,
-	}); err != nil {
+	}
+	if task.TaskStatus == constants.TaskStatusRevision {
+		action, round = constants.TaskActionResubmit, round+1
+		taskUpdates["SubmitCount"] = round
+	}
+	if err := w.RepositoryTask.UpdateStatus(ctx, taskID, taskUpdates); err != nil {
 		return err
 	}
 	historyNotes := fmt.Sprintf("Approval dikirim ke %s, status PENDING", w.roleNameOf(ctx, chain[0].RoleID))
 	if notes != "" {
 		historyNotes = fmt.Sprintf("%s (catatan: %s)", historyNotes, notes)
 	}
-	return w.recordHistory(ctx, taskID, constants.TaskActionSubmit, submittedBy, historyNotes)
+	return w.recordHistory(ctx, taskID, action, submittedBy, historyMeta{role: submitterRole, round: round}, historyNotes)
 }
 
 // notifyApprovalPending tells the approver of a level that just became
