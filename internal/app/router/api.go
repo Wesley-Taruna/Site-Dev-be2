@@ -12,4 +12,9 @@ func init() {
 	handlers["task"] = &handler.TaskHandler{}
 	handlers["dashboard/task"] = &handler.DashboardHandler{}
 	handlers["site"] = &handler.SiteHandler{}
+	handlers["wilayah"] = &handler.WilayahHandler{}
+	handlers["roles"] = &handler.RoleHandler{}
+	handlers["users"] = &handler.UserHandler{}
+	handlers["approval-matrix"] = &handler.ApprovalMatrixHandler{}
+	handlers["settings"] = &handler.SettingsHandler{}
 }
