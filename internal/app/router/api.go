@@ -11,4 +11,5 @@ func init() {
 	handlers["person"] = &handler.PersonHandler{}
 	handlers["task"] = &handler.TaskHandler{}
 	handlers["dashboard/task"] = &handler.DashboardHandler{}
+	handlers["site"] = &handler.SiteHandler{}
 }
