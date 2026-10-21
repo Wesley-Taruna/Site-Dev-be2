@@ -122,6 +122,32 @@ func (_m *IApprovalRepository) GetPendingDetailByApprover(ctx context.Context, h
 	return r0, ret.Error(1)
 }
 
+// GetHeldDetailByApprover provides a mock function with given fields: ctx, headerID, approverID
+func (_m *IApprovalRepository) GetHeldDetailByApprover(ctx context.Context, headerID uint, approverID int64) (*model.ApprovalDetail, error) {
+	ret := _m.Called(ctx, headerID, approverID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint, int64) (*model.ApprovalDetail, error)); ok {
+		return rf(ctx, headerID, approverID)
+	}
+
+	var r0 *model.ApprovalDetail
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.ApprovalDetail)
+	}
+	return r0, ret.Error(1)
+}
+
+// UpdateDetailIfHeld provides a mock function with given fields: ctx, id, updates
+func (_m *IApprovalRepository) UpdateDetailIfHeld(ctx context.Context, id uint, updates map[string]interface{}) (int64, error) {
+	ret := _m.Called(ctx, id, updates)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint, map[string]interface{}) (int64, error)); ok {
+		return rf(ctx, id, updates)
+	}
+
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
 // CreateHeader provides a mock function with given fields: ctx, header
 func (_m *IApprovalRepository) CreateHeader(ctx context.Context, header *model.ApprovalHeader) error {
 	ret := _m.Called(ctx, header)

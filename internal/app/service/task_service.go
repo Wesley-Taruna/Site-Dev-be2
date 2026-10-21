@@ -127,7 +127,12 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 	orderBy := taskOrderBy(req.SortBy, req.SortDir)
 
 	var tasks []*model.Task
-	tasks, total, err = s.RepositoryTask.Get(ctx, offset, dto.TaskPageSize, orderBy, siteIDs, req.Status, createdBy)
+	if req.Status == constants.TaskStatusHoldGroup {
+		// status=HOLD = both HOLD_* (November scope, API-CHANGES §13.3)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.HoldStatuses, siteIDs, createdBy)
+	} else {
+		tasks, total, err = s.RepositoryTask.Get(ctx, offset, dto.TaskPageSize, orderBy, siteIDs, req.Status, createdBy)
+	}
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
@@ -408,7 +413,7 @@ func (s *TaskService) GetSiteList(ctx context.Context, req dto.ListRequestGet) (
 	}
 
 	var tasks []*model.Task
-	tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, pageOffset(req.Page), dto.ListPageSize, taskOrderBy(req.SortBy, req.SortDir), constants.SiteListRequestStatuses, siteIDs)
+	tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, pageOffset(req.Page), dto.ListPageSize, taskOrderBy(req.SortBy, req.SortDir), constants.SiteListRequestStatuses, siteIDs, 0)
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)

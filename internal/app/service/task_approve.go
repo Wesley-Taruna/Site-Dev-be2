@@ -2,14 +2,18 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 	"site-dev-backend/internal/app/model"
 
+	"github.com/labstack/echo/v4"
 	"gitlab.com/fami-app-v2/familib/familabs/log"
+	"gorm.io/gorm"
 )
 
 // approvalHistoryMessage is the history note of an APPROVE/REJECT/REVISION
@@ -25,10 +29,47 @@ func approvalHistoryMessage(decision string, username string, roleName string, n
 	if decision == constants.TaskActionRevision {
 		return fmt.Sprintf("Site diminta revisi oleh %s dengan catatan (%s)", actor, notes)
 	}
+	// November scope (API-CHANGES §13.1); wording is our choice
+	if decision == constants.TaskActionHold {
+		return fmt.Sprintf("Site ditahan (Hold Status) oleh %s dengan alasan (%s)", actor, notes)
+	}
+	if decision == constants.TaskActionRelease {
+		if notes == "" {
+			return fmt.Sprintf("Hold Status dilepas oleh %s", actor)
+		}
+		return fmt.Sprintf("Hold Status dilepas oleh %s dengan catatan (%s)", actor, notes)
+	}
 	if notes == "" {
 		return fmt.Sprintf("Site di approve oleh %s", actor)
 	}
 	return fmt.Sprintf("Site di approve oleh %s dengan catatan (%s)", actor, notes)
+}
+
+// approverLevel finds the level the caller decides on: PENDING for every
+// decision, HOLD for RELEASE (November scope, API-CHANGES §13.1: a held
+// level only takes RELEASE; RELEASE needs a held level).
+func (s *TaskService) approverLevel(ctx context.Context, taskID string, headerID uint, actorID int64, decision string) (*model.ApprovalDetail, error) {
+	if decision == constants.TaskActionRelease {
+		detail, err := s.RepositoryApproval.GetHeldDetailByApprover(ctx, headerID, actorID)
+		if err == nil {
+			return detail, nil
+		}
+		if _, pendingErr := s.RepositoryApproval.GetPendingDetailByApprover(ctx, headerID, actorID); pendingErr == nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "Pengajuan ini tidak sedang dalam Hold Status.")
+		}
+		return nil, fmt.Errorf("task_service: no pending approval for this user on task %s: %w", taskID, err)
+	}
+
+	detail, err := s.RepositoryApproval.GetPendingDetailByApprover(ctx, headerID, actorID)
+	if err == nil {
+		return detail, nil
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		if _, heldErr := s.RepositoryApproval.GetHeldDetailByApprover(ctx, headerID, actorID); heldErr == nil {
+			return nil, echo.NewHTTPError(http.StatusBadRequest, "Pengajuan ini sedang Anda tahan. Tekan Lanjutkan dulu.")
+		}
+	}
+	return nil, fmt.Errorf("task_service: no pending approval for this user on task %s: %w", taskID, err)
 }
 
 func (s *TaskService) Approve(ctx context.Context, taskID string, actorID int64, req dto.TaskActionRequest) (err error) {
@@ -60,9 +101,9 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 		return fmt.Errorf("task_service: task %s is not awaiting approval (status=%s)", taskID, task.TaskStatus)
 	}
 
-	detail, err := s.RepositoryApproval.GetPendingDetailByApprover(ctx, header.ID, actorID)
+	detail, err := s.approverLevel(ctx, taskID, header.ID, actorID, req.Decision)
 	if err != nil {
-		return fmt.Errorf("task_service: no pending approval for this user on task %s: %w", taskID, err)
+		return err
 	}
 
 	var actorUsername string
@@ -73,6 +114,10 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 	var notifyNext *model.ApprovalDetail
 	err = s.RepositoryTransaction.Do(ctx, func(ctx context.Context) error {
 		now := time.Now()
+
+		if req.Decision == constants.TaskActionRelease {
+			return s.release(ctx, w, taskID, actorID, detail, req.Notes, actorUsername, now)
+		}
 
 		detailUpdates := map[string]interface{}{
 			"Notes":     req.Notes,
@@ -86,6 +131,8 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			detailUpdates["Status"] = constants.ApprovalDetailStatusRejected
 		case constants.TaskActionRevision:
 			detailUpdates["Status"] = constants.ApprovalDetailStatusRevision
+		case constants.TaskActionHold:
+			detailUpdates["Status"] = constants.ApprovalDetailStatusHold
 		}
 
 		rows, err := s.RepositoryApproval.UpdateDetailIfPending(ctx, detail.ID, detailUpdates)
@@ -101,6 +148,8 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			historyAction = constants.TaskActionReject
 		} else if req.Decision == constants.TaskActionRevision {
 			historyAction = constants.TaskActionRevision
+		} else if req.Decision == constants.TaskActionHold {
+			historyAction = constants.TaskActionHold
 		}
 		historyNotes := approvalHistoryMessage(req.Decision, actorUsername, w.roleNameOf(ctx, detail.ApproverRoleID), req.Notes)
 		if err := w.recordHistory(ctx, taskID, historyAction, actorID, historyNotes); err != nil {
@@ -116,6 +165,15 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			}
 			return s.RepositoryTask.UpdateStatus(ctx, taskID, map[string]interface{}{
 				"TaskStatus": constants.TaskStatusRejected,
+				"UpdatedBy":  actorID,
+				"UpdatedAt":  now,
+			})
+		}
+
+		if req.Decision == constants.TaskActionHold {
+			// the round stays PENDING; no e-mail (open: review §5 #9)
+			return s.RepositoryTask.UpdateStatus(ctx, taskID, map[string]interface{}{
+				"TaskStatus": constants.TaskStatusHold(detail.ApproverRoleID),
 				"UpdatedBy":  actorID,
 				"UpdatedAt":  now,
 			})
@@ -196,4 +254,33 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 		w.notifyApprovalPending(ctx, taskID, task.SiteID, header.SubmittedBy, notifyNext, req.Notes)
 	}
 	return nil
+}
+
+// release takes a held level back to PENDING (acted_at and reason cleared,
+// as the prototype does) and the task back to WAITING_<ROLE>; then the
+// approver decides normally. No e-mail: the approver was told already.
+func (s *TaskService) release(ctx context.Context, w *taskWorkflow, taskID string, actorID int64, detail *model.ApprovalDetail, notes string, actorUsername string, now time.Time) error {
+	rows, err := s.RepositoryApproval.UpdateDetailIfHeld(ctx, detail.ID, map[string]interface{}{
+		"Status":    constants.ApprovalDetailStatusPending,
+		"Notes":     "",
+		"ActedAt":   nil,
+		"UpdatedAt": now,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("task_service: approval already acted on for task %s (conflict)", taskID)
+	}
+
+	historyNotes := approvalHistoryMessage(constants.TaskActionRelease, actorUsername, w.roleNameOf(ctx, detail.ApproverRoleID), notes)
+	if err := w.recordHistory(ctx, taskID, constants.TaskActionRelease, actorID, historyNotes); err != nil {
+		return err
+	}
+
+	return s.RepositoryTask.UpdateStatus(ctx, taskID, map[string]interface{}{
+		"TaskStatus": constants.TaskStatusWaiting(detail.ApproverRoleID),
+		"UpdatedBy":  actorID,
+		"UpdatedAt":  now,
+	})
 }

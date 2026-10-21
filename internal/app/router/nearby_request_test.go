@@ -48,7 +48,7 @@ func TestNearbyRequests(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, oldDataEnvelope(t, []oldNearbyRequestResp{{SiteID: "ST7", SiteName: "Toko Lain", TaskStatus: "WAITING_DIV_HEAD", OwnerID: 5005, OwnerName: "eko", Lat: nLat + 0.001, Lng: nLng, DistanceM: 111}}), body)
-	assert.Regexp(t, `^SELECT Sites.SiteID, Sites.SiteName1, Sites.SiteLat, Sites.SiteLon, Tasks.TaskStatus, Tasks.CreatedBy FROM "Sites" JOIN Tasks ON Tasks.SiteID = Sites.SiteID WHERE \(Sites.SiteLat BETWEEN -6\.22\d+ AND -6\.22\d+ AND Sites.SiteLon BETWEEN 106\.80\d+ AND 106\.81\d+\) AND \(\(Tasks.TaskStatus LIKE 'WAITING\[_\]%' OR Tasks.TaskStatus IN \('REVISION','COMPLETED'\)\)\)$`, rec.sqls[0])
+	assert.Regexp(t, `^SELECT Sites.SiteID, Sites.SiteName1, Sites.SiteLat, Sites.SiteLon, Tasks.TaskStatus, Tasks.CreatedBy FROM "Sites" JOIN Tasks ON Tasks.SiteID = Sites.SiteID WHERE \(Sites.SiteLat BETWEEN -6\.22\d+ AND -6\.22\d+ AND Sites.SiteLon BETWEEN 106\.80\d+ AND 106\.81\d+\) AND \(\(Tasks.TaskStatus LIKE 'WAITING\[_\]%' OR Tasks.TaskStatus IN \('REVISION','COMPLETED','HOLD_DEPT_HEAD','HOLD_DIV_HEAD'\)\)\)$`, rec.sqls[0])
 
 	code, _ = call(t, h, http.MethodGet, "/v1/task/nearby?lat=-6.2&lng=106.8&radius=3000", nil, 1001)
 	assert.Equal(t, http.StatusBadRequest, code)

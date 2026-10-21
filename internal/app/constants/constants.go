@@ -19,6 +19,19 @@ func TaskStatusWaiting(roleID string) string {
 	return fmt.Sprintf("WAITING_%s", roleID)
 }
 
+// TaskStatusHold builds the status of a task an approver holds ("Hold
+// Status", November scope, API-CHANGES §13.1), e.g. "HOLD_DEPT_HEAD".
+func TaskStatusHold(roleID string) string {
+	return fmt.Sprintf("HOLD_%s", roleID)
+}
+
+// TaskStatusHoldGroup is the list filter value for both HOLD_* statuses
+// (GET /v1/task?status=HOLD, API-CHANGES §13.3).
+const TaskStatusHoldGroup = "HOLD"
+
+// HoldStatuses are the HOLD_* statuses of the fixed chain.
+var HoldStatuses = []string{TaskStatusHold(RoleDeptHead), TaskStatusHold(RoleDivHead)}
+
 // Task history actions stored in TaskHistories.Action.
 const (
 	TaskActionCreate   = "CREATE"
@@ -29,6 +42,10 @@ const (
 	TaskActionRevision = "REVISION"
 	TaskActionForward  = "FORWARD"
 	TaskActionComplete = "COMPLETE"
+	// November scope (API-CHANGES §13.1): an approver holds a request, and
+	// releases it again
+	TaskActionHold    = "HOLD"
+	TaskActionRelease = "RELEASE"
 )
 
 // Role IDs stored in Users.RoleID / Roles.RoleID. RoleUser (site staff) is
@@ -47,6 +64,8 @@ const (
 	ApprovalDetailStatusApproved = "APPROVED"
 	ApprovalDetailStatusRejected = "REJECTED"
 	ApprovalDetailStatusRevision = "REVISION"
+	// ApprovalDetailStatusHold: the approver holds the level (notes = reason)
+	ApprovalDetailStatusHold = "HOLD"
 )
 
 // ApprovalHDR.OverallStatus values.
@@ -81,6 +100,9 @@ var SiteListRequestStatuses = []string{
 	TaskStatusRejected,
 	TaskStatusRevision,
 	TaskStatusCompleted,
+	// November scope (API-CHANGES §13.3): held requests are in flight too
+	TaskStatusHold(RoleDeptHead),
+	TaskStatusHold(RoleDivHead),
 }
 
 // Daily quotas (per user, per day in Asia/Jakarta). The limit is read from
@@ -120,7 +142,8 @@ const TaskActionDuplicateConfirmed = "DUPLICATE_CONFIRMED"
 // for "other requests nearby" (local §8): sent and not finally rejected.
 // Not DRAFT (may be abandoned), not REJECTED. (Local §8 also counted
 // REJECTED_BY_DIV_HEAD, which only exists with §5, not ported.)
-var NearbyRequestExtraStatuses = []string{TaskStatusRevision, TaskStatusCompleted}
+// HOLD_* counts as active too (November scope, API-CHANGES §13.3).
+var NearbyRequestExtraStatuses = []string{TaskStatusRevision, TaskStatusCompleted, TaskStatusHold(RoleDeptHead), TaskStatusHold(RoleDivHead)}
 
 // Duplicate check on submit (config nearby_request.duplicate_check).
 const (

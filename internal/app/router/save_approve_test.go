@@ -387,7 +387,7 @@ func TestSideBySide_ApproveRejectAndRevision(t *testing.T) {
 func TestSideBySide_ApproveRefused(t *testing.T) {
 	withFlow(t)
 	conflict := sqlfake.Result{Match: `UPDATE "ApprovalDET"`, Affected: sqlfake.Int64(0)}
-	h, _, fdb := stack(t, append([]sqlfake.Result{conflict, noRows(`|7 |1001 |PENDING`)}, approveResults(1, 2)...)...)
+	h, _, fdb := stack(t, append([]sqlfake.Result{conflict, noRows(`|7 |1001 |PENDING`), noRows(`|7 |1001 |HOLD`)}, approveResults(1, 2)...)...)
 
 	code, body := call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "APPROVE"}, 3001)
 	assert.Equal(t, http.StatusInternalServerError, code)

@@ -19,8 +19,8 @@ type ITaskRepository interface {
 	// GetByIDs loads the tasks for a set of TaskIDs.
 	GetByIDs(ctx context.Context, taskIDs []string) (tasks []*model.Task, err error)
 	// GetByStatuses lists tasks whose status is one of statuses (siteIDs
-	// nil = no site filter), with the total count.
-	GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string) (tasks []*model.Task, count int64, err error)
+	// nil = no site filter, createdBy 0 = everyone's), with the total count.
+	GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error)
 	// CountByStatus counts tasks per TaskStatus (createdBy 0 = all tasks).
 	CountByStatus(ctx context.Context, createdBy int64) (counts []model.TaskStatusCount, err error)
 	Create(ctx context.Context, task *model.Task) (err error)
@@ -132,7 +132,7 @@ func (r *TaskRepository) GetByIDs(ctx context.Context, taskIDs []string) (tasks 
 	return
 }
 
-func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string) (tasks []*model.Task, count int64, err error) {
+func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error) {
 	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetByStatuses")
 	defer span.End()
 
@@ -140,6 +140,9 @@ func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit in
 
 	if siteIDs != nil {
 		db = db.Where("SiteID IN (?)", siteIDs)
+	}
+	if createdBy != 0 {
+		db = db.Where("CreatedBy = ?", createdBy)
 	}
 
 	if err = db.Model(new(model.Task)).Count(&count).Error; err != nil {

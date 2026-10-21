@@ -123,3 +123,9 @@ func TestMaybeGenerateAIInsight_UpdatedSubmitSkips(t *testing.T) {
 
 	m.queue.AssertNotCalled(t, "Enabled")
 }
+
+func TestApprovalHistoryMessage_HoldRelease(t *testing.T) {
+	assert.Equal(t, "Site ditahan (Hold Status) oleh citra (Dept Head) dengan alasan (zonasi)", approvalHistoryMessage("HOLD", "citra", "Dept Head", "zonasi"))
+	assert.Equal(t, "Hold Status dilepas oleh citra (Dept Head)", approvalHistoryMessage("RELEASE", "citra", "Dept Head", ""))
+	assert.Equal(t, "Hold Status dilepas oleh citra (Dept Head) dengan catatan (aman)", approvalHistoryMessage("RELEASE", "citra", "Dept Head", "aman"))
+}

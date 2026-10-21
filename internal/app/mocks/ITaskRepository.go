@@ -77,12 +77,12 @@ func (_m *ITaskRepository) GetByIDs(ctx context.Context, taskIDs []string) ([]*m
 	return r0, ret.Error(1)
 }
 
-// GetByStatuses provides a mock function with given fields: ctx, offset, limit, orderBy, statuses, siteIDs
-func (_m *ITaskRepository) GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string) ([]*model.Task, int64, error) {
-	ret := _m.Called(ctx, offset, limit, orderBy, statuses, siteIDs)
+// GetByStatuses provides a mock function with given fields: ctx, offset, limit, orderBy, statuses, siteIDs, createdBy
+func (_m *ITaskRepository) GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string, createdBy int64) ([]*model.Task, int64, error) {
+	ret := _m.Called(ctx, offset, limit, orderBy, statuses, siteIDs, createdBy)
 
-	if rf, ok := ret.Get(0).(func(context.Context, int, int, string, []string, []string) ([]*model.Task, int64, error)); ok {
-		return rf(ctx, offset, limit, orderBy, statuses, siteIDs)
+	if rf, ok := ret.Get(0).(func(context.Context, int, int, string, []string, []string, int64) ([]*model.Task, int64, error)); ok {
+		return rf(ctx, offset, limit, orderBy, statuses, siteIDs, createdBy)
 	}
 
 	var r0 []*model.Task

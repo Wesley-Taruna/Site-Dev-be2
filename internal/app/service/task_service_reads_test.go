@@ -116,7 +116,7 @@ func TestTaskServiceGetSiteList_SearchWithoutHits(t *testing.T) {
 
 func TestTaskServiceGetSiteList_StatusesAndPaging(t *testing.T) {
 	s, m := newTestTaskService(t)
-	m.task.On("GetByStatuses", ctxAny, 20, 20, "CreatedAt ASC", constants.SiteListRequestStatuses, []string(nil)).Return(nil, int64(0), nil)
+	m.task.On("GetByStatuses", ctxAny, 20, 20, "CreatedAt ASC", constants.SiteListRequestStatuses, []string(nil), int64(0)).Return(nil, int64(0), nil)
 	m.site.On("GetByIDs", ctxAny, []string{}).Return(nil, nil)
 
 	_, _, err := s.GetSiteList(context.Background(), dto.ListRequestGet{Page: 2})

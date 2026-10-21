@@ -414,7 +414,9 @@ func TestSideBySide_SiteList(t *testing.T) {
 		{TaskID: "TS1", SiteID: "ST1", SiteName1: "Toko Kemang", SiteAddress1: "Jl. Kemang Raya 1", SiteAddress2: "RT 01", SiteAddress3: "Jakarta Selatan",
 			TaskStatus: "COMPLETED", CreatedBy: 1001, UpdatedBy: 3002, CreatedAt: created, UpdatedAt: updated},
 	}, 41, 3, 0), body)
-	statuses := `('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED')`
+	// site-dev-api: ('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED');
+	// November scope (API-CHANGES §13.3) adds the two HOLD_* statuses
+	statuses := `('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED','HOLD_DEPT_HEAD','HOLD_DIV_HEAD')`
 	assert.Equal(t, []string{
 		`SELECT "SiteID" FROM "Sites" WHERE SiteID LIKE '%kem%' OR SiteName1 LIKE '%kem%' OR SiteName2 LIKE '%kem%' OR SiteAddress1 LIKE '%kem%' OR SiteAddress2 LIKE '%kem%' OR SiteAddress3 LIKE '%kem%'`,
 		`SELECT count(*) FROM "Tasks" WHERE TaskStatus IN ` + statuses + ` AND SiteID IN ('ST1','ST2')`,
@@ -466,7 +468,9 @@ func TestSideBySide_ApprovalHistory(t *testing.T) {
 		SiteAddress3: "Jakarta Selatan", TaskStatus: "WAITING_DIV_HEAD", CreatedBy: 1001, CreatedByName: "andi", Level: 1, Status: "REVISION",
 		Notes: "foto kurang", ActedAt: &actedAt, CreatedAt: created,
 	}}, 1, 2, 0), body)
-	joins := `FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID JOIN Tasks ON Tasks.TaskID = ApprovalHDR.TaskID JOIN Sites ON Sites.SiteID = Tasks.SiteID WHERE ApprovalDET.ApproverID = 3001 AND ApprovalDET.Status IN ('APPROVED','REJECTED','REVISION')`
+	joins := `FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID JOIN Tasks ON Tasks.TaskID = ApprovalHDR.TaskID JOIN Sites ON Sites.SiteID = Tasks.SiteID WHERE ApprovalDET.ApproverID = 3001 AND ApprovalDET.Status IN ('APPROVED','REJECTED','REVISION','HOLD')`
+	// site-dev-api: IN ('APPROVED','REJECTED','REVISION'); November scope
+	// (API-CHANGES §13.1) adds HOLD rows
 	assert.Equal(t, `SELECT count(*) `+joins, rec.sqls[0])
 	assert.Equal(t, `SELECT ApprovalDET.* `+joins+` ORDER BY ApprovalDET.ActedAt ASC OFFSET 20 ROWS FETCH NEXT 20 ROWS ONLY`, rec.sqls[1])
 }

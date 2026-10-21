@@ -15,7 +15,7 @@ func TestTaskRepositoryGetByStatuses_NoSiteFilter(t *testing.T) {
 	o, rec := fakeDBOptions(t)
 	r := &TaskRepository{opt: o}
 
-	_, _, err := r.GetByStatuses(context.Background(), 0, 20, "CreatedAt ASC", []string{"DRAFT", "COMPLETED"}, nil)
+	_, _, err := r.GetByStatuses(context.Background(), 0, 20, "CreatedAt ASC", []string{"DRAFT", "COMPLETED"}, nil, 0)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{

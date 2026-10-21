@@ -25,11 +25,15 @@ type IApprovalRepository interface {
 	// matches Sites.SiteName1 (LIKE).
 	GetPendingByApprover(ctx context.Context, approverID int64, search string, orderBy string, limit int, offset int) (details []*model.ApprovalDetail, count int64, err error)
 	// GetActedByApprover lists the rows an approver already decided
-	// (APPROVED/REJECTED/REVISION).
+	// (APPROVED/REJECTED/REVISION, and HOLD).
 	GetActedByApprover(ctx context.Context, approverID int64, search string, orderBy string, limit int, offset int) (details []*model.ApprovalDetail, count int64, err error)
 	// GetPendingDetailByApprover is the PENDING level of this approver in a
 	// round.
 	GetPendingDetailByApprover(ctx context.Context, headerID uint, approverID int64) (detail *model.ApprovalDetail, err error)
+	// GetHeldDetailByApprover is the HOLD level of this approver in a round.
+	GetHeldDetailByApprover(ctx context.Context, headerID uint, approverID int64) (detail *model.ApprovalDetail, err error)
+	// UpdateDetailIfHeld changes a level only while it is still HOLD.
+	UpdateDetailIfHeld(ctx context.Context, id uint, updates map[string]interface{}) (rows int64, err error)
 	CreateHeader(ctx context.Context, header *model.ApprovalHeader) (err error)
 	CreateDetails(ctx context.Context, details []*model.ApprovalDetail) (err error)
 	// UpdateHeader / UpdateDetailByID change only the given columns.
@@ -142,6 +146,7 @@ func (r *ApprovalRepository) GetActedByApprover(ctx context.Context, approverID 
 	db := r.approverRows(ctx).
 		Where("ApprovalDET.ApproverID = ? AND ApprovalDET.Status IN ?", approverID, []string{
 			constants.ApprovalDetailStatusApproved, constants.ApprovalDetailStatusRejected, constants.ApprovalDetailStatusRevision,
+			constants.ApprovalDetailStatusHold, // November scope (API-CHANGES §13.1)
 		})
 
 	details, count, err = r.page(db, search, orderBy, limit, offset)
@@ -181,14 +186,43 @@ func (r *ApprovalRepository) GetPendingDetailByApprover(ctx context.Context, hea
 	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetPendingDetailByApprover")
 	defer span.End()
 
-	db := readDB(ctx, r.opt)
+	if detail, err = r.detailByApproverAndStatus(ctx, headerID, approverID, constants.ApprovalDetailStatusPending); err != nil {
+		span.RecordError(err)
+	}
+	return
+}
 
+func (r *ApprovalRepository) GetHeldDetailByApprover(ctx context.Context, headerID uint, approverID int64) (detail *model.ApprovalDetail, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetHeldDetailByApprover")
+	defer span.End()
+
+	if detail, err = r.detailByApproverAndStatus(ctx, headerID, approverID, constants.ApprovalDetailStatusHold); err != nil {
+		span.RecordError(err)
+	}
+	return
+}
+
+func (r *ApprovalRepository) detailByApproverAndStatus(ctx context.Context, headerID uint, approverID int64, status string) (detail *model.ApprovalDetail, err error) {
 	detail = &model.ApprovalDetail{}
-	err = db.Where("ApprovalHeaderID = ? AND ApproverID = ? AND Status = ?", headerID, approverID, constants.ApprovalDetailStatusPending).
+	err = readDB(ctx, r.opt).
+		Where("ApprovalHeaderID = ? AND ApproverID = ? AND Status = ?", headerID, approverID, status).
 		First(detail).Error
 	if err != nil {
-		span.RecordError(err)
 		detail = nil
+	}
+	return
+}
+
+func (r *ApprovalRepository) UpdateDetailIfHeld(ctx context.Context, id uint, updates map[string]interface{}) (rows int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.UpdateDetailIfHeld")
+	defer span.End()
+
+	tx := writeDB(ctx, r.opt).Model(new(model.ApprovalDetail)).
+		Where("ID = ? AND Status = ?", id, constants.ApprovalDetailStatusHold).
+		Updates(updates)
+	rows, err = tx.RowsAffected, tx.Error
+	if err != nil {
+		span.RecordError(err)
 		return
 	}
 

@@ -45,10 +45,11 @@ type ApprovalHistoryResponseGet struct {
 }
 
 // TaskActionRequest is the body of POST /v1/task/:id/approve: decision
-// APPROVE, REJECT or REVISION; notes required for REJECT/REVISION, at most
-// 500 characters.
+// APPROVE, REJECT or REVISION, and since the November scope HOLD and
+// RELEASE (API-CHANGES §13.1); notes required for REJECT/REVISION/HOLD, at
+// most 500 characters.
 type TaskActionRequest struct {
-	Decision string `json:"decision" valid:"required|in:APPROVE,REJECT,REVISION"`
+	Decision string `json:"decision" valid:"required|in:APPROVE,REJECT,REVISION,HOLD,RELEASE"`
 	Notes    string `json:"notes"`
 }
 
@@ -58,6 +59,9 @@ func (r TaskActionRequest) Validate() *validation.Output {
 	o := &validation.Output{Valid: true}
 	if (r.Decision == "REJECT" || r.Decision == "REVISION") && r.Notes == "" {
 		o.Failure("notes.required", "The notes field is required.")
+	}
+	if r.Decision == "HOLD" && r.Notes == "" {
+		o.Failure("notes.required", "Alasan Hold Status wajib diisi.")
 	}
 	if len(r.Notes) > 500 {
 		o.Failure("notes.lte", "The notes may not be greater than 500")
