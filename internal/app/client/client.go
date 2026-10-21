@@ -16,6 +16,8 @@ type Clients struct {
 	ApprovalJWT IApprovalJWTClient // fami-module token for approval-link login
 	Storage     IStorageClient     // site photos (TODO: Google Cloud Storage, plan Q4)
 	Gemini      IGeminiClient      // AI insight (TODO: the HTTP call, plan Q4)
+	TaskQueue   ITaskQueueClient   // background jobs (TODO: Cloud Tasks, plan Q4)
+	Mail        IMailClient        // approval e-mail (TODO: the sender, plan Q4)
 }
 
 // NewClients builds every client from the config; called once at start
@@ -25,5 +27,7 @@ func NewClients(env env.Provider) Clients {
 		ApprovalJWT: NewApprovalJWTClient(env),
 		Storage:     NewStorageClient(env),
 		Gemini:      NewGeminiClient(env),
+		TaskQueue:   NewTaskQueueClient(env),
+		Mail:        NewMailClient(env),
 	}
 }

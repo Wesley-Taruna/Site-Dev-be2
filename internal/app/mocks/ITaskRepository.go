@@ -107,6 +107,34 @@ func (_m *ITaskRepository) CountByStatus(ctx context.Context, createdBy int64) (
 	return r0, ret.Error(1)
 }
 
+// Create provides a mock function with given fields: ctx, task
+func (_m *ITaskRepository) Create(ctx context.Context, task *model.Task) error {
+	ret := _m.Called(ctx, task)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.Task) error); ok {
+		r0 = rf(ctx, task)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateStatus provides a mock function with given fields: ctx, taskID, updates
+func (_m *ITaskRepository) UpdateStatus(ctx context.Context, taskID string, updates map[string]interface{}) error {
+	ret := _m.Called(ctx, taskID, updates)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, map[string]interface{}) error); ok {
+		r0 = rf(ctx, taskID, updates)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewITaskRepository creates a new instance of ITaskRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewITaskRepository(t interface {
 	mock.TestingT

@@ -31,6 +31,13 @@ type ISiteRepository interface {
 	GetActiveStores(ctx context.Context, search string, limit int, offset int) (stores []model.StoreMap, count int64, err error)
 	// GetAttachmentByID returns one attachment (to stream its file).
 	GetAttachmentByID(ctx context.Context, id uint) (attachment *model.SiteAttachment, err error)
+	// GetByName1 finds a site by exact SiteName1 (duplicate check).
+	GetByName1(ctx context.Context, name1 string) (site *model.Site, err error)
+	// Upsert creates the site or overwrites every form field.
+	Upsert(ctx context.Context, site *model.Site) (err error)
+	// ReplaceAttachments deletes the site's attachments and inserts the new
+	// list.
+	ReplaceAttachments(ctx context.Context, siteID string, attachments []*model.SiteAttachment) (err error)
 }
 
 type SiteRepository struct {
@@ -243,6 +250,93 @@ func (r *SiteRepository) GetAttachmentByID(ctx context.Context, id uint) (attach
 	if err = db.Where("SiteAttachmentID = ?", id).First(attachment).Error; err != nil {
 		span.RecordError(err)
 		attachment = nil
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetByName1(ctx context.Context, name1 string) (site *model.Site, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetByName1")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	site = &model.Site{}
+	if err = db.Where("SiteName1 = ?", name1).First(site).Error; err != nil {
+		span.RecordError(err)
+		site = nil
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) Upsert(ctx context.Context, site *model.Site) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.Upsert")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	var count int64
+	if err = db.Model(new(model.Site)).Where("SiteID = ?", site.SiteID).Count(&count).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	if count == 0 {
+		if err = db.Create(site).Error; err != nil {
+			span.RecordError(err)
+		}
+		return
+	}
+
+	updates := map[string]interface{}{
+		"SiteName1":              site.SiteName1,
+		"SiteName2":              site.SiteName2,
+		"SiteAddress1":           site.SiteAddress1,
+		"SiteAddress2":           site.SiteAddress2,
+		"SiteAddress3":           site.SiteAddress3,
+		"SitePostalCode":         site.SitePostalCode,
+		"SiteDistrict":           site.SiteDistrict,
+		"SiteCity":               site.SiteCity,
+		"SiteRegion":             site.SiteRegion,
+		"SiteLat":                site.SiteLat,
+		"SiteLon":                site.SiteLon,
+		"SiteTelepon":            site.SiteTelepon,
+		"SiteTeleponExt":         site.SiteTeleponExt,
+		"SiteMobilePhone":        site.SiteMobilePhone,
+		"SitePic":                site.SitePic,
+		"SiteFax":                site.SiteFax,
+		"SitePlannedOpeningDate": site.SitePlannedOpeningDate,
+		"SiteSalesArea":          site.SiteSalesArea,
+		"SiteSellingAlcohol":     site.SiteSellingAlcohol,
+		"SiteOpen24Hours":        site.SiteOpen24Hours,
+		"UpdatedBy":              site.UpdatedBy,
+		"UpdatedAt":              site.UpdatedAt,
+	}
+	if err = db.Model(new(model.Site)).Where("SiteID = ?", site.SiteID).Updates(updates).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) ReplaceAttachments(ctx context.Context, siteID string, attachments []*model.SiteAttachment) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.ReplaceAttachments")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Where("SiteID = ?", siteID).Delete(new(model.SiteAttachment)).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	if len(attachments) == 0 {
+		return
+	}
+	if err = db.Create(&attachments).Error; err != nil {
+		span.RecordError(err)
 		return
 	}
 

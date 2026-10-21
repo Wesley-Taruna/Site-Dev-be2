@@ -107,6 +107,88 @@ func (_m *IApprovalRepository) GetActedByApprover(ctx context.Context, approverI
 	return r0, ret.Get(1).(int64), ret.Error(2)
 }
 
+// GetPendingDetailByApprover provides a mock function with given fields: ctx, headerID, approverID
+func (_m *IApprovalRepository) GetPendingDetailByApprover(ctx context.Context, headerID uint, approverID int64) (*model.ApprovalDetail, error) {
+	ret := _m.Called(ctx, headerID, approverID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint, int64) (*model.ApprovalDetail, error)); ok {
+		return rf(ctx, headerID, approverID)
+	}
+
+	var r0 *model.ApprovalDetail
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.ApprovalDetail)
+	}
+	return r0, ret.Error(1)
+}
+
+// CreateHeader provides a mock function with given fields: ctx, header
+func (_m *IApprovalRepository) CreateHeader(ctx context.Context, header *model.ApprovalHeader) error {
+	ret := _m.Called(ctx, header)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.ApprovalHeader) error); ok {
+		r0 = rf(ctx, header)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// CreateDetails provides a mock function with given fields: ctx, details
+func (_m *IApprovalRepository) CreateDetails(ctx context.Context, details []*model.ApprovalDetail) error {
+	ret := _m.Called(ctx, details)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, []*model.ApprovalDetail) error); ok {
+		r0 = rf(ctx, details)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateHeader provides a mock function with given fields: ctx, id, updates
+func (_m *IApprovalRepository) UpdateHeader(ctx context.Context, id uint, updates map[string]interface{}) error {
+	ret := _m.Called(ctx, id, updates)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint, map[string]interface{}) error); ok {
+		r0 = rf(ctx, id, updates)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateDetailByID provides a mock function with given fields: ctx, id, updates
+func (_m *IApprovalRepository) UpdateDetailByID(ctx context.Context, id uint, updates map[string]interface{}) error {
+	ret := _m.Called(ctx, id, updates)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint, map[string]interface{}) error); ok {
+		r0 = rf(ctx, id, updates)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateDetailIfPending provides a mock function with given fields: ctx, id, updates
+func (_m *IApprovalRepository) UpdateDetailIfPending(ctx context.Context, id uint, updates map[string]interface{}) (int64, error) {
+	ret := _m.Called(ctx, id, updates)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint, map[string]interface{}) (int64, error)); ok {
+		return rf(ctx, id, updates)
+	}
+
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
 // NewIApprovalRepository creates a new instance of IApprovalRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewIApprovalRepository(t interface {
 	mock.TestingT

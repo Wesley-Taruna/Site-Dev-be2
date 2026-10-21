@@ -27,6 +27,17 @@ type IApprovalRepository interface {
 	// GetActedByApprover lists the rows an approver already decided
 	// (APPROVED/REJECTED/REVISION).
 	GetActedByApprover(ctx context.Context, approverID int64, search string, orderBy string, limit int, offset int) (details []*model.ApprovalDetail, count int64, err error)
+	// GetPendingDetailByApprover is the PENDING level of this approver in a
+	// round.
+	GetPendingDetailByApprover(ctx context.Context, headerID uint, approverID int64) (detail *model.ApprovalDetail, err error)
+	CreateHeader(ctx context.Context, header *model.ApprovalHeader) (err error)
+	CreateDetails(ctx context.Context, details []*model.ApprovalDetail) (err error)
+	// UpdateHeader / UpdateDetailByID change only the given columns.
+	UpdateHeader(ctx context.Context, id uint, updates map[string]interface{}) (err error)
+	UpdateDetailByID(ctx context.Context, id uint, updates map[string]interface{}) (err error)
+	// UpdateDetailIfPending changes a level only while it is still PENDING
+	// (two approvers acting at once); rows 0 = someone acted already.
+	UpdateDetailIfPending(ctx context.Context, id uint, updates map[string]interface{}) (rows int64, err error)
 }
 
 type ApprovalRepository struct {
@@ -163,5 +174,96 @@ func (r *ApprovalRepository) page(db *gorm.DB, search string, orderBy string, li
 	}
 
 	err = db.Select("ApprovalDET.*").Order(orderBy).Limit(limit).Offset(offset).Find(&details).Error
+	return
+}
+
+func (r *ApprovalRepository) GetPendingDetailByApprover(ctx context.Context, headerID uint, approverID int64) (detail *model.ApprovalDetail, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetPendingDetailByApprover")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	detail = &model.ApprovalDetail{}
+	err = db.Where("ApprovalHeaderID = ? AND ApproverID = ? AND Status = ?", headerID, approverID, constants.ApprovalDetailStatusPending).
+		First(detail).Error
+	if err != nil {
+		span.RecordError(err)
+		detail = nil
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) CreateHeader(ctx context.Context, header *model.ApprovalHeader) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.CreateHeader")
+	defer span.End()
+
+	if err = writeDB(ctx, r.opt).Create(header).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) CreateDetails(ctx context.Context, details []*model.ApprovalDetail) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.CreateDetails")
+	defer span.End()
+
+	if len(details) == 0 {
+		return
+	}
+	if err = writeDB(ctx, r.opt).Create(&details).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) UpdateHeader(ctx context.Context, id uint, updates map[string]interface{}) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.UpdateHeader")
+	defer span.End()
+
+	if len(updates) == 0 {
+		return
+	}
+	if err = writeDB(ctx, r.opt).Model(new(model.ApprovalHeader)).Where("ID = ?", id).Updates(updates).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) UpdateDetailByID(ctx context.Context, id uint, updates map[string]interface{}) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.UpdateDetailByID")
+	defer span.End()
+
+	if len(updates) == 0 {
+		return
+	}
+	if err = writeDB(ctx, r.opt).Model(new(model.ApprovalDetail)).Where("ID = ?", id).Updates(updates).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) UpdateDetailIfPending(ctx context.Context, id uint, updates map[string]interface{}) (rows int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.UpdateDetailIfPending")
+	defer span.End()
+
+	tx := writeDB(ctx, r.opt).Model(new(model.ApprovalDetail)).
+		Where("ID = ? AND Status = ?", id, constants.ApprovalDetailStatusPending).
+		Updates(updates)
+	rows, err = tx.RowsAffected, tx.Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
 	return
 }

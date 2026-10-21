@@ -152,6 +152,49 @@ func (_m *ISiteRepository) GetAttachmentByID(ctx context.Context, id uint) (*mod
 	return r0, ret.Error(1)
 }
 
+// GetByName1 provides a mock function with given fields: ctx, name1
+func (_m *ISiteRepository) GetByName1(ctx context.Context, name1 string) (*model.Site, error) {
+	ret := _m.Called(ctx, name1)
+
+	if rf, ok := ret.Get(0).(func(context.Context, string) (*model.Site, error)); ok {
+		return rf(ctx, name1)
+	}
+
+	var r0 *model.Site
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.Site)
+	}
+	return r0, ret.Error(1)
+}
+
+// Upsert provides a mock function with given fields: ctx, site
+func (_m *ISiteRepository) Upsert(ctx context.Context, site *model.Site) error {
+	ret := _m.Called(ctx, site)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.Site) error); ok {
+		r0 = rf(ctx, site)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// ReplaceAttachments provides a mock function with given fields: ctx, siteID, attachments
+func (_m *ISiteRepository) ReplaceAttachments(ctx context.Context, siteID string, attachments []*model.SiteAttachment) error {
+	ret := _m.Called(ctx, siteID, attachments)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, []*model.SiteAttachment) error); ok {
+		r0 = rf(ctx, siteID, attachments)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewISiteRepository creates a new instance of ISiteRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteRepository(t interface {
 	mock.TestingT

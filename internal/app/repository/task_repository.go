@@ -23,6 +23,10 @@ type ITaskRepository interface {
 	GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string) (tasks []*model.Task, count int64, err error)
 	// CountByStatus counts tasks per TaskStatus (createdBy 0 = all tasks).
 	CountByStatus(ctx context.Context, createdBy int64) (counts []model.TaskStatusCount, err error)
+	Create(ctx context.Context, task *model.Task) (err error)
+	// UpdateStatus changes only the given columns (TaskStatus, UpdatedBy,
+	// UpdatedAt).
+	UpdateStatus(ctx context.Context, taskID string, updates map[string]interface{}) (err error)
 }
 
 type TaskRepository struct {
@@ -168,6 +172,38 @@ func (r *TaskRepository) CountByStatus(ctx context.Context, createdBy int64) (co
 	}
 
 	if err = db.Select("TaskStatus, COUNT(1) as Count").Group("TaskStatus").Scan(&counts).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *TaskRepository) Create(ctx context.Context, task *model.Task) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.Create")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Create(task).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *TaskRepository) UpdateStatus(ctx context.Context, taskID string, updates map[string]interface{}) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.UpdateStatus")
+	defer span.End()
+
+	if len(updates) == 0 {
+		return
+	}
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Model(new(model.Task)).Where("TaskID = ?", taskID).Updates(updates).Error; err != nil {
 		span.RecordError(err)
 		return
 	}
