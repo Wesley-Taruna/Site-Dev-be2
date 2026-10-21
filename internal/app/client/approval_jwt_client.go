@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"site-dev-backend/global"
+	"gitlab.com/fami-app-v2/familib/familabs/env"
 )
 
 // approvalJWTRole is fixed by product decision: every approval-link login
@@ -39,8 +39,7 @@ type ApprovalJWTClient struct {
 // NewApprovalJWTClient reads approval_jwt.base_url and
 // public_api.username/password from the config (values in devops' secret
 // store, never in the repo).
-func NewApprovalJWTClient() IApprovalJWTClient {
-	env := global.Setup.Common.Env
+func NewApprovalJWTClient(env env.Provider) IApprovalJWTClient {
 	creds := base64.StdEncoding.EncodeToString([]byte(env.GetString("public_api.username") + ":" + env.GetString("public_api.password")))
 	return &ApprovalJWTClient{
 		baseURL:    env.GetString("approval_jwt.base_url"),

@@ -18,4 +18,6 @@ func init() {
 	handlers["approval-matrix"] = &handler.ApprovalMatrixHandler{}
 	handlers["settings"] = &handler.SettingsHandler{}
 	handlers["validation"] = &handler.ValidationHandler{}
+	handlers["upload"] = &handler.UploadHandler{}
+	handlers["attachment"] = &handler.AttachmentHandler{}
 }

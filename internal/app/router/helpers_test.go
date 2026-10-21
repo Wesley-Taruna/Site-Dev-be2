@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"site-dev-backend/global"
+	"site-dev-backend/internal/app/client"
 	"site-dev-backend/internal/pkg/redisfake"
 	"site-dev-backend/internal/pkg/sqlfake"
 
@@ -71,11 +72,25 @@ func stackOn(t *testing.T, conn *sql.DB) (*echo.Echo, *sqlLog, *opt.Options) {
 	if redisServer != nil {
 		o.Redisx = redisx.NewRedisx(redis.NewClient(&redis.Options{Addr: redisServer.Addr()}))
 	}
-	global.Setup = global.HandlerOptions{Common: o}
+	clients := client.NewClients(testEnv)
+	if clientOverride != nil {
+		clientOverride(&clients)
+	}
+	global.Setup = global.HandlerOptions{Common: o, Clients: clients}
 
 	e := Router()
 	lgr.SetOutput(io.Discard) // Router() points the logger at stdout
 	return e, rec, &global.Setup.Common
+}
+
+// clientOverride, when set by withClients, changes the outside-service
+// clients of the next stack (e.g. a mock file storage).
+var clientOverride func(*client.Clients)
+
+// withClients swaps clients for the stacks built in this test.
+func withClients(t *testing.T, fn func(*client.Clients)) {
+	clientOverride = fn
+	t.Cleanup(func() { clientOverride = nil })
 }
 
 // redisServer, when set by withRedis, is given to the next stack.

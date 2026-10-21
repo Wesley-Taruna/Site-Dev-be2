@@ -44,7 +44,7 @@ func NewValidationService() IValidationService {
 		RepositoryApproval:     repository.NewApprovalRepository(),
 		RepositoryApprovalCode: repository.NewApprovalCodeRepository(),
 		RepositoryTask:         repository.NewTaskRepository(),
-		ClientApprovalJWT:      client.NewApprovalJWTClient(),
+		ClientApprovalJWT:      global.Setup.Clients.ApprovalJWT,
 	}
 }
 

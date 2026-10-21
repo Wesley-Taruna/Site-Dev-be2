@@ -29,6 +29,8 @@ type ISiteRepository interface {
 	// GetActiveStores is the searchable, paged list of the same stores
 	// ("Site Active" table); search matches store name or store type.
 	GetActiveStores(ctx context.Context, search string, limit int, offset int) (stores []model.StoreMap, count int64, err error)
+	// GetAttachmentByID returns one attachment (to stream its file).
+	GetAttachmentByID(ctx context.Context, id uint) (attachment *model.SiteAttachment, err error)
 }
 
 type SiteRepository struct {
@@ -225,6 +227,22 @@ func (r *SiteRepository) GetActiveStores(ctx context.Context, search string, lim
 
 	if err = db.Raw(activeStoreListQuery, like, like, offset, limit).Scan(&stores).Error; err != nil {
 		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteRepository) GetAttachmentByID(ctx context.Context, id uint) (attachment *model.SiteAttachment, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetAttachmentByID")
+	defer span.End()
+
+	db := readDB(ctx, r.opt)
+
+	attachment = &model.SiteAttachment{}
+	if err = db.Where("SiteAttachmentID = ?", id).First(attachment).Error; err != nil {
+		span.RecordError(err)
+		attachment = nil
 		return
 	}
 

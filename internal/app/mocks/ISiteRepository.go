@@ -137,6 +137,21 @@ func (_m *ISiteRepository) GetActiveStores(ctx context.Context, search string, l
 	return r0, ret.Get(1).(int64), ret.Error(2)
 }
 
+// GetAttachmentByID provides a mock function with given fields: ctx, id
+func (_m *ISiteRepository) GetAttachmentByID(ctx context.Context, id uint) (*model.SiteAttachment, error) {
+	ret := _m.Called(ctx, id)
+
+	if rf, ok := ret.Get(0).(func(context.Context, uint) (*model.SiteAttachment, error)); ok {
+		return rf(ctx, id)
+	}
+
+	var r0 *model.SiteAttachment
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*model.SiteAttachment)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewISiteRepository creates a new instance of ISiteRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteRepository(t interface {
 	mock.TestingT

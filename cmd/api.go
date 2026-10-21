@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"site-dev-backend/global"
+	"site-dev-backend/internal/app/client"
 	"site-dev-backend/internal/app/server"
 
 	familabs "gitlab.com/fami-app-v2/familib/familabs/server"
@@ -37,5 +38,6 @@ func start() {
 	if global.Setup.Common.Trace == nil {
 		global.Setup.Common.Trace = otel.Tracer(global.Setup.Common.Config.App.Name)
 	}
+	global.Setup.Clients = client.NewClients(global.Setup.Common.Env)
 	server.StartRestServer()
 }
