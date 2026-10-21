@@ -10,6 +10,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel"
 )
 
 var consumerCmd = &cobra.Command{
@@ -29,6 +30,12 @@ func startConsumer() {
 		logrus.Error(err.Error())
 		os.Exit(1)
 		return
+	}
+	// familabs.Start() leaves Options.Trace nil (its tracer setup is
+	// commented out), but every service/repository calls opt.Trace.Start.
+	// Use the global OpenTelemetry tracer (no-op unless a provider is set).
+	if global.Setup.Common.Trace == nil {
+		global.Setup.Common.Trace = otel.Tracer(global.Setup.Common.Config.App.Name)
 	}
 	server.StartConsumer()
 }
