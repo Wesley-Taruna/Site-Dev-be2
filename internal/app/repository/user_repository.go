@@ -27,7 +27,7 @@ func (r *UserRepository) GetByID(ctx context.Context, userID int64) (user *model
 	ctx, span := r.opt.Trace.Start(ctx, "UserRepository.GetByID")
 	defer span.End()
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	user = &model.User{}
 	if err = db.Where("UserID = ?", userID).First(user).Error; err != nil {

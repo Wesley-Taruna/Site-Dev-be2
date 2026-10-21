@@ -31,7 +31,7 @@ func (r *TaskRepository) Get(ctx context.Context, offset int, limit int, orderBy
 	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.Get")
 	defer span.End()
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	if siteIDs != nil {
 		db = db.Where("SiteID IN (?)", siteIDs)
@@ -70,7 +70,7 @@ func (r *TaskRepository) GetBySiteID(ctx context.Context, siteID string) (task *
 	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetBySiteID")
 	defer span.End()
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	task = &model.Task{}
 	if err = db.Where("SiteID = ?", siteID).First(task).Error; err != nil {

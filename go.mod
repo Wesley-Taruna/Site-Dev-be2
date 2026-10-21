@@ -6,12 +6,14 @@ toolchain go1.23.6
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.4
+	github.com/go-redis/redis/v8 v8.11.5
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/labstack/echo-contrib v0.17.2
 	github.com/labstack/echo/v4 v4.13.3
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.8.1
+	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	gitlab.com/fami-app-v2/fami-datamodel/fami-protobuf v1.0.2
 	gitlab.com/fami-app-v2/familib/familabs v1.0.2
@@ -60,7 +62,6 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.25.0 // indirect
 	github.com/go-redis/cache/v8 v8.4.4 // indirect
-	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/go-redsync/redsync/v4 v4.13.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
@@ -121,7 +122,6 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/spf13/viper v1.19.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect

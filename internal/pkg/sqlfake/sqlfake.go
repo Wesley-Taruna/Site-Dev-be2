@@ -24,10 +24,17 @@ type Result struct {
 	Columns []string
 	Rows    [][]driver.Value
 	Err     error
+	// Affected is the "rows affected" of a matching INSERT/UPDATE/DELETE
+	// run through Exec. nil = 1 row.
+	Affected *int64
 }
 
+// Int64 returns a pointer to n (for Result.Affected).
+func Int64(n int64) *int64 { return &n }
+
 // DB records queries and answers them from Results (first match wins;
-// no match = zero rows).
+// no match = zero rows / one row affected). Transactions are recorded as
+// "BEGIN", "COMMIT" and "ROLLBACK" entries in Queries.
 type DB struct {
 	mu      sync.Mutex
 	Results []Result
@@ -72,29 +79,66 @@ type conn struct{ db *DB }
 func (c *conn) Prepare(string) (driver.Stmt, error) {
 	return nil, errors.New("sqlfake: prepare not supported")
 }
-func (c *conn) Close() error              { return nil }
-func (c *conn) Begin() (driver.Tx, error) { return nil, errors.New("sqlfake: no transactions") }
+func (c *conn) Close() error { return nil }
+func (c *conn) Begin() (driver.Tx, error) {
+	return c.BeginTx(context.Background(), driver.TxOptions{})
+}
 
-func (c *conn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+func (c *conn) BeginTx(context.Context, driver.TxOptions) (driver.Tx, error) {
+	c.db.record("BEGIN")
+	return &tx{db: c.db}, nil
+}
+
+type tx struct{ db *DB }
+
+func (t *tx) Commit() error   { t.db.record("COMMIT"); return nil }
+func (t *tx) Rollback() error { t.db.record("ROLLBACK"); return nil }
+
+func (d *DB) record(query string) []Result {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.queries = append(d.queries, query)
+	return d.Results
+}
+
+func match(results []Result, query string, args []driver.NamedValue) (Result, bool) {
 	text := query
 	for _, a := range args {
 		text += fmt.Sprintf(" |%v", a.Value)
 	}
-
-	c.db.mu.Lock()
-	c.db.queries = append(c.db.queries, query)
-	results := c.db.Results
-	c.db.mu.Unlock()
-
 	for _, r := range results {
 		if strings.Contains(text, r.Match) {
-			if r.Err != nil {
-				return nil, r.Err
-			}
-			return &rows{columns: r.Columns, data: r.Rows}, nil
+			return r, true
 		}
 	}
+	return Result{}, false
+}
+
+func (c *conn) QueryContext(_ context.Context, query string, args []driver.NamedValue) (driver.Rows, error) {
+	results := c.db.record(query)
+
+	if r, ok := match(results, query, args); ok {
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		return &rows{columns: r.Columns, data: r.Rows}, nil
+	}
 	return &rows{}, nil
+}
+
+func (c *conn) ExecContext(_ context.Context, query string, args []driver.NamedValue) (driver.Result, error) {
+	results := c.db.record(query)
+
+	affected := int64(1)
+	if r, ok := match(results, query, args); ok {
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		if r.Affected != nil {
+			affected = *r.Affected
+		}
+	}
+	return driver.RowsAffected(affected), nil
 }
 
 type rows struct {

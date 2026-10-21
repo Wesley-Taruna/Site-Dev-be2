@@ -10,13 +10,17 @@ import (
 	"time"
 
 	"site-dev-backend/internal/app/model"
+	"site-dev-backend/internal/pkg/redisfake"
 	"site-dev-backend/internal/pkg/sqlfake"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/fami-app-v2/familib/familabs/log"
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
+	"gitlab.com/fami-app-v2/familib/familabs/redisx"
 	"go.opentelemetry.io/otel/trace/noop"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
@@ -43,22 +47,52 @@ func (l *sqlRecorder) Trace(_ context.Context, _ time.Time, fc func() (string, i
 }
 
 func fakeDBOptions(t *testing.T, results ...sqlfake.Result) (opt.Options, *sqlRecorder) {
+	o, rec, _ := fakeDB(t, results...)
+	return o, rec
+}
+
+// testNow is what gorm writes into CreatedAt/UpdatedAt fields it fills
+// itself, so INSERT statements are stable in tests.
+var testNow = time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)
+
+// fakeDB is fakeDBOptions plus the fake database itself (its Queries also
+// list BEGIN/COMMIT/ROLLBACK).
+func fakeDB(t *testing.T, results ...sqlfake.Result) (opt.Options, *sqlRecorder, *sqlfake.DB) {
 	rec := &sqlRecorder{}
-	conn, err := sqlfake.Open(&sqlfake.DB{Results: results})
+	fdb := &sqlfake.DB{Results: results}
+	conn, err := sqlfake.Open(fdb)
 	require.NoError(t, err)
 	db, err := gorm.Open(sqlserver.New(sqlserver.Config{Conn: conn}), &gorm.Config{
 		DisableAutomaticPing: true,
 		Logger:               rec,
+		NowFunc:              func() time.Time { return testNow },
 	})
 	require.NoError(t, err)
 
 	lgr := logrus.New()
 	lgr.SetOutput(io.Discard)
-	return opt.Options{
+	o := opt.Options{
 		Database: opt.Database{Read: db, Write: db},
 		Logger:   log.NewLoggerWithClient("site-dev-backend-test", lgr),
 		Trace:    noop.NewTracerProvider().Tracer("test"),
-	}, rec
+		Env:      viper.New(),
+	}
+	o.Config.App.Name = "site-dev-api"
+	o.Config.App.Env = "test"
+	return o, rec, fdb
+}
+
+// fakeRedis starts an in-memory Redis and points o.Redisx at it.
+func fakeRedis(t *testing.T, o *opt.Options) *redisfake.Server {
+	srv, err := redisfake.Start()
+	require.NoError(t, err)
+	client := redis.NewClient(&redis.Options{Addr: srv.Addr()})
+	o.Redisx = redisx.NewRedisx(client)
+	t.Cleanup(func() {
+		_ = client.Close()
+		srv.Close()
+	})
+	return srv
 }
 
 func TestTaskRepositoryGet_AllFilters(t *testing.T) {

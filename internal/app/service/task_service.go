@@ -3,9 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 
 	"site-dev-backend/global"
 	"site-dev-backend/internal/app/constants"
@@ -87,11 +85,7 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 		}
 	}
 
-	page := req.Page
-	if page == 0 {
-		page = 1
-	}
-	offset := (page - 1) * dto.TaskPageSize
+	offset := pageOffset(req.Page)
 	orderBy := taskOrderBy(req.SortBy, req.SortDir)
 
 	var tasks []*model.Task
@@ -180,20 +174,5 @@ func (s *TaskService) GetHistory(ctx context.Context, siteID string) (res []dto.
 // taskOrderBy builds the ORDER BY of the task list: default "CreatedAt ASC";
 // sort_by may be CreatedAt or TaskStatus; sort_dir desc/-1 or asc/1.
 func taskOrderBy(sortBy string, sortDir string) string {
-	allowed := map[string]bool{"CreatedAt": true, "TaskStatus": true}
-
-	column := "CreatedAt"
-	if sortBy != "" && allowed[sortBy] {
-		column = sortBy
-	}
-
-	direction := "ASC"
-	switch strings.ToLower(sortDir) {
-	case "desc", "-1":
-		direction = "DESC"
-	case "asc", "1":
-		direction = "ASC"
-	}
-
-	return fmt.Sprintf("%s %s", column, direction)
+	return orderClause(sortBy, sortDir, "CreatedAt", map[string]bool{"CreatedAt": true, "TaskStatus": true})
 }

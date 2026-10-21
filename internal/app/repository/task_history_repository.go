@@ -28,7 +28,7 @@ func (r *TaskHistoryRepository) GetByTaskID(ctx context.Context, taskID string) 
 	ctx, span := r.opt.Trace.Start(ctx, "TaskHistoryRepository.GetByTaskID")
 	defer span.End()
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	if err = db.Where("TaskID = ?", taskID).Order("CreatedAt ASC").Find(&histories).Error; err != nil {
 		span.RecordError(err)

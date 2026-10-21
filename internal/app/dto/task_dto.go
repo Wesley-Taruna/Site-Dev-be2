@@ -14,8 +14,13 @@ type TaskRequestGet struct {
 	SortDir string
 }
 
+// ListPageSize is the fixed number of rows per page of every site-dev list
+// (site-dev-api's Pagination.GetLimit: its "limit" is never filled from the
+// query, so per_page/limit are ignored and 20 rows are always fetched).
+const ListPageSize = 20
+
 // TaskPageSize is the fixed number of rows per page of GET /v1/task.
-const TaskPageSize = 20
+const TaskPageSize = ListPageSize
 
 // TaskResponseGet is one row of GET /v1/task. JSON names match
 // site-dev-api's TaskResp exactly (no omitempty: empty values are sent).

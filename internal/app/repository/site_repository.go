@@ -36,7 +36,7 @@ func (r *SiteRepository) GetByIDs(ctx context.Context, siteIDs []string) (sites 
 		return
 	}
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	if err = db.Where("SiteID IN ?", siteIDs).Find(&sites).Error; err != nil {
 		span.RecordError(err)
@@ -50,7 +50,7 @@ func (r *SiteRepository) GetIDsBySearch(ctx context.Context, search string) (sit
 	ctx, span := r.opt.Trace.Start(ctx, "SiteRepository.GetIDsBySearch")
 	defer span.End()
 
-	db := r.opt.Database.Read.WithContext(ctx)
+	db := readDB(ctx, r.opt)
 
 	like := "%" + search + "%"
 	err = db.Model(new(model.Site)).
