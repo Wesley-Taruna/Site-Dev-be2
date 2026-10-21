@@ -237,7 +237,7 @@ func TestRoutesMatchSiteDevAPI(t *testing.T) {
 		}
 	}
 	sort.Strings(missing)
-	t.Logf("site-dev-api routes ported: %d of %d; not yet: %v", len(ported), len(siteDevAPIRoutes), missing)
+	assert.Empty(t, missing, "every site-dev-api route exists")
 	assert.Subset(t, siteDevAPIRoutes, keys(ported))
 }
 

@@ -21,4 +21,5 @@ func init() {
 	handlers["upload"] = &handler.UploadHandler{}
 	handlers["attachment"] = &handler.AttachmentHandler{}
 	handlers["queue"] = &handler.QueueHandler{}
+	handlers["geocoding"] = &handler.GeocodingHandler{}
 }

@@ -18,6 +18,7 @@ type Clients struct {
 	Gemini      IGeminiClient      // AI insight (TODO: the HTTP call, plan Q4)
 	TaskQueue   ITaskQueueClient   // background jobs (TODO: Cloud Tasks, plan Q4)
 	Mail        IMailClient        // approval e-mail (TODO: the sender, plan Q4)
+	Geocoding   IGeocodingClient   // Google Geocoding API (ported, stdlib only)
 }
 
 // NewClients builds every client from the config; called once at start
@@ -29,5 +30,6 @@ func NewClients(env env.Provider) Clients {
 		Gemini:      NewGeminiClient(env),
 		TaskQueue:   NewTaskQueueClient(env),
 		Mail:        NewMailClient(env),
+		Geocoding:   NewGeocodingClient(env),
 	}
 }
