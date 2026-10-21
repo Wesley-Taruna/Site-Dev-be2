@@ -2,6 +2,7 @@ package client
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestBuildPrompt(t *testing.T) {
 	site := &model.Site{SiteName1: "Toko Kemang", SiteName2: "Kemang 2", SiteAddress1: "Jl. Kemang", SiteCity: "Jakarta", SiteLat: -6.26, SiteLon: 106.81,
 		SiteSalesArea: 120, SiteOpen24Hours: true, SitePlannedOpeningDate: time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC)}
 
-	p := buildPrompt(site, nil, nil, nil)
+	p := buildPrompt(site, nil, nil, nil, nil)
 
 	assert.True(t, strings.HasPrefix(p, "Anda adalah analis senior site selection FamilyMart Indonesia."))
 	for _, want := range []string{
@@ -61,4 +62,26 @@ func TestGeminiRequestAndAnswer(t *testing.T) {
 
 	_, err = ParseGeminiAnswer([]byte(`{"candidates":[]}`), &model.Site{}, now)
 	assert.EqualError(t, err, "gemini returned empty response")
+}
+
+func promptFixtureSite() (*model.Site, *model.SiteContext, []*model.SiteCompetitor, []*model.SiteCustomNote) {
+	park := "LIMITED"
+	site := &model.Site{SiteID: "ST20261016000001", SiteName1: "Kemang Timur", SiteName2: "Ruko", SiteAddress1: "Jl. Kemang Timur No. 5", SiteCity: "Jakarta Selatan", SiteRegion: "DKI Jakarta", SitePostalCode: "12730", SiteDistrict: "Mampang Prapatan", SiteLat: -6.262, SiteLon: 106.8167, SiteSalesArea: 120, SiteOpen24Hours: true, SitePlannedOpeningDate: time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC)}
+	ctx := &model.SiteContext{FootTrafficObservation: "±300 orang/jam sore", ParkingAvailability: &park, AnchorLandmark: "Kemang Village"}
+	comps := []*model.SiteCompetitor{{CompetitorName: "Indomaret", Distance: "150 m", CompetitorType: "Convenience Store"}}
+	notes := []*model.SiteCustomNote{{Title: "Sewa", Content: "Rp 250 jt/tahun"}}
+	return site, ctx, comps, notes
+}
+
+// Without map data the prompt is byte for byte site-dev-api 20eeab4's
+// (golden files captured from that code in site-dev-api's local commit
+// 2191e07, copied unchanged).
+func TestPromptSameAsSiteDevAPI(t *testing.T) {
+	site, ctx, comps, notes := promptFixtureSite()
+	want, err := os.ReadFile("testdata/prompt_original_with_context.golden")
+	require.NoError(t, err)
+	assert.Equal(t, string(want), buildPrompt(site, ctx, comps, notes, nil))
+	want, err = os.ReadFile("testdata/prompt_original_no_context.golden")
+	require.NoError(t, err)
+	assert.Equal(t, string(want), buildPrompt(site, nil, nil, nil, nil))
 }

@@ -19,6 +19,8 @@ type Clients struct {
 	TaskQueue   ITaskQueueClient   // background jobs (TODO: Cloud Tasks, plan Q4)
 	Mail        IMailClient        // approval e-mail (TODO: the sender, plan Q4)
 	Geocoding   IGeocodingClient   // Google Geocoding API (ported, stdlib only)
+	Places      IPlacesClient      // nearby places, Google (TODO: the calls, plan Q4)
+	Overpass    IOverpassClient    // nearby places, OpenStreetMap (TODO: the calls, plan Q4)
 }
 
 // NewClients builds every client from the config; called once at start
@@ -31,5 +33,7 @@ func NewClients(env env.Provider) Clients {
 		TaskQueue:   NewTaskQueueClient(env),
 		Mail:        NewMailClient(env),
 		Geocoding:   NewGeocodingClient(env),
+		Places:      NewPlacesClient(env),
+		Overpass:    NewOverpassClient(env),
 	}
 }

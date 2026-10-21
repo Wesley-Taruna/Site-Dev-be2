@@ -119,6 +119,12 @@ type AIInsightResponseGet struct {
 	DataAssumptions  []string                  `json:"dataAssumptions"`
 	ContextWarnings  []AIInsightContextWarning `json:"contextWarnings"`
 	GeneratedAt      time.Time                 `json:"generatedAt"`
+	// DataSource / Measured (optional, local §6): which map data the AI got
+	// ("gemini+google", "gemini+osm", "gemini+mixed", or "gemini" when the
+	// lookup failed). Only on a fresh generate/preview while [places] is
+	// enabled; not stored.
+	DataSource string          `json:"data_source,omitempty"`
+	Measured   *NearbyMeasured `json:"measured,omitempty"`
 }
 
 // AIInsightTaskPayload is the queue job of POST /v1/queue/ai-insight.

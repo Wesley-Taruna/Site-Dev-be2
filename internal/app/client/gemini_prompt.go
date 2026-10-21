@@ -211,7 +211,9 @@ func yesNo(b bool) string {
 }
 
 // buildPrompt ports buildPrompt() in gemini.ts.
-func buildPrompt(site *model.Site, siteCtx *model.SiteContext, competitors []*model.SiteCompetitor, notes []*model.SiteCustomNote) string {
+// With measured (local §6) it adds the DATA TERUKUR block after the user
+// context and rule E; nil gives exactly the original prompt.
+func buildPrompt(site *model.Site, siteCtx *model.SiteContext, competitors []*model.SiteCompetitor, notes []*model.SiteCustomNote, measured *dto.NearbyMeasured) string {
 	addressParts := make([]string, 0, 3)
 	for _, p := range []string{site.SiteAddress1, site.SiteAddress2, site.SiteAddress3} {
 		if p != "" {
@@ -245,6 +247,10 @@ func buildPrompt(site *model.Site, siteCtx *model.SiteContext, competitors []*mo
 	ctxRule := "Karena TIDAK ada konteks user, generate estimasi umum dari kota/koordinat. contextWarnings boleh kosong, tapi confidenceLevel WAJIB 'low' atau 'medium' dengan reason yang jelas."
 	if hasCtx {
 		ctxRule = "Karena ADA konteks user, validasi setiap klaim dan isi contextWarnings sesuai aturan A."
+	}
+	if measured != nil {
+		contextBlock += "\n" + strings.TrimSuffix(measuredBlock(measured), "\n")
+		ctxRule += "\n\n" + measuredRule(measured)
 	}
 
 	return fmt.Sprintf(`Anda adalah analis senior site selection FamilyMart Indonesia. Tugas: hasilkan analisis kelayakan lokasi yang TEGAS, KONSISTEN, dan TIDAK KONTRADIKTIF.
@@ -356,7 +362,7 @@ type geminiPayload struct {
 // in (prompt + response schema, temperature 0.35, max 8000 tokens).
 func GeminiRequest(in GeminiInput) ([]byte, error) {
 	body := geminiRequestBody{
-		Contents: []geminiContent{{Parts: []geminiPart{{Text: buildPrompt(in.Site, in.Context, in.Competitors, in.Notes)}}}},
+		Contents: []geminiContent{{Parts: []geminiPart{{Text: buildPrompt(in.Site, in.Context, in.Competitors, in.Notes, in.Measured)}}}},
 	}
 	body.GenerationConfig.ResponseMimeType = "application/json"
 	body.GenerationConfig.ResponseSchema = responseSchema
@@ -402,4 +408,149 @@ func ParseGeminiAnswer(respBytes []byte, site *model.Site, now time.Time) (dto.A
 		ContextWarnings:  out.ContextWarnings,
 		GeneratedAt:      now,
 	}, nil
+}
+
+// --- local §6: measured map data in the prompt (site-dev-api 2191e07
+// nearby_area.go, from the prototype's server/gemini.ts) ---
+
+// NearbySourceLabel is how a map data source is named on screen and in the
+// prompt.
+func NearbySourceLabel(source string) string {
+	switch source {
+	case constants.NearbySourceGoogle:
+		return "Google Places"
+	case constants.NearbySourceOSM:
+		return "OpenStreetMap"
+	case constants.NearbySourceMixed:
+		return "Google Places + OpenStreetMap"
+	}
+	return source
+}
+
+// NearbyExamplesPerGroup is how many nearest examples per non-competitor
+// category go to Gemini (counts stay complete).
+const NearbyExamplesPerGroup = 5
+
+var nearbyCategoryAI = map[string]string{
+	constants.NearbyCategoryCompetitor: "Minimarket pesaing (rantai bermerek)",
+	constants.NearbyCategoryOffice:     "Kantor",
+	constants.NearbyCategorySchool:     "Sekolah (TK sampai SMA/SMK)",
+	constants.NearbyCategoryUniversity: "Kampus (universitas/akademi)",
+	constants.NearbyCategoryApartment:  "Apartemen",
+}
+
+// fmtM: "120 m", "1,2 km".
+func fmtM(m int) string {
+	if m >= 1000 {
+		return strings.Replace(fmt.Sprintf("%.1f km", float64(m)/1000), ".", ",", 1)
+	}
+	return fmt.Sprintf("%d m", m)
+}
+
+func containsString(list []string, v string) bool {
+	for _, x := range list {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// formatMeasured renders the DATA TERUKUR lines.
+func formatMeasured(m *dto.NearbyMeasured) string {
+	src := NearbySourceLabel(m.Source)
+	var lines []string
+	for _, c := range constants.NearbyCategories {
+		var items []dto.NearbyMeasuredItem
+		for _, x := range m.Items {
+			if x.Category == c {
+				items = append(items, x)
+			}
+		}
+		capped := containsString(m.Capped, c)
+		n := fmt.Sprintf("%d", m.Counts[c])
+		if capped {
+			n = "≥ " + n
+		}
+		cappedNote := ""
+		if capped {
+			cappedNote = " (sumber memotong hasil; bisa lebih)"
+		}
+		label := func(x dto.NearbyMeasuredItem) string {
+			name := x.Name
+			if name == "" {
+				name = "(tanpa nama)"
+			}
+			prefix := ""
+			if c == constants.NearbyCategoryCompetitor && x.Brand != "" && x.Brand != BrandOther && !strings.Contains(strings.ToLower(x.Name), strings.ToLower(x.Brand)) {
+				prefix = x.Brand + " "
+			}
+			return fmt.Sprintf("%s%s %s", prefix, name, fmtM(x.DistanceM))
+		}
+
+		if c == constants.NearbyCategoryCompetitor {
+			var list []string
+			for i, x := range items {
+				if i >= 25 {
+					break
+				}
+				list = append(list, label(x))
+			}
+			more := ""
+			if len(items) > 25 {
+				more = fmt.Sprintf(", +%d lainnya", len(items)-25)
+			}
+			line := fmt.Sprintf("- %s: %s tercatat di %s", nearbyCategoryAI[c], n, src)
+			if len(list) > 0 {
+				line += " → " + strings.Join(list, "; ") + more
+			}
+			lines = append(lines, line+cappedNote)
+			continue
+		}
+
+		per := m.ExamplesPerGroup
+		if per <= 0 {
+			per = NearbyExamplesPerGroup
+		}
+		var ex []string
+		for i, x := range items {
+			if i >= per {
+				break
+			}
+			ex = append(ex, label(x))
+		}
+		line := fmt.Sprintf("- %s: %s tempat bernama tercatat di %s", nearbyCategoryAI[c], n, src)
+		if len(ex) > 0 {
+			line += " (contoh terdekat: " + strings.Join(ex, "; ") + ")"
+		}
+		lines = append(lines, line+cappedNote)
+	}
+	if fm := m.NearestFamilyMart; fm != nil {
+		lines = append(lines, fmt.Sprintf("- FamilyMart terdekat (daftar toko FamilyMart): %s (kode %s), %s; FamilyMart dalam radius 1 km: %d", fm.Name, fm.Code, fmtM(fm.DistanceM), fm.Within1Km))
+	}
+	lines = append(lines, fmt.Sprintf(`Catatan: semua angka di atas = tempat BERNAMA yang tercatat di %s dalam radius %d m dari koordinat. Ini BUKAN sensus lengkap: 0 berarti "tidak tercatat di %s", bukan pasti tidak ada; tempat tanpa nama, bangunan baru, atau dalam pembangunan bisa belum tercatat.`, src, m.RadiusM, src))
+	return strings.Join(lines, "\n")
+}
+
+// measuredBlock is the prompt section after the user context.
+func measuredBlock(m *dto.NearbyMeasured) string {
+	return fmt.Sprintf(`
+============================
+DATA TERUKUR (%s, radius %d m dari koordinat; diambil otomatis oleh sistem, BUKAN klaim user; sama dengan angka yang dilihat staf):
+============================
+%s
+`, NearbySourceLabel(m.Source), m.RadiusM, formatMeasured(m))
+}
+
+// measuredRule is rule E of the prompt.
+func measuredRule(m *dto.NearbyMeasured) string {
+	src := NearbySourceLabel(m.Source)
+	return fmt.Sprintf(`E) DATA TERUKUR (WAJIB DIPAKAI bila tersedia)
+   1. Dasarkan skor footTraffic, competition, demographics, dan accessibility terutama pada DATA TERUKUR di atas, dikombinasikan dengan observasi user. Kantor, sekolah, kampus, dan apartemen adalah sumber pembeli (pekerja, pelajar/orang tua, mahasiswa, penghuni).
+   2. Setiap angka tempat sekitar yang Anda sebut HARUS sama persis dengan DATA TERUKUR dan ditulis sebagai "tercatat di %[1]s" dengan radius, awalan "Data peta:" (contoh: "Data peta: 6 minimarket pesaing dan 12 kantor tercatat di %[1]s dalam %[2]d m, terdekat Indomaret 120 m"). Kutip minimal satu di metrics.competition.factors dan metrics.footTraffic.factors.
+   3. JANGAN menyebut jumlah, nama, atau jarak tempat yang tidak ada di DATA TERUKUR atau di observasi user. Jangan memperkirakan "puluhan sekolah" dsb. JANGAN menulis angka ini sebagai jumlah pasti/sensus ("ada tepat 12 kantor"); tulis "tercatat".
+   4. competitors: HANYA pesaing dari DATA TERUKUR (nama/merek & jarak persis, distanceKm = meter/1000) ditambah kompetitor teramati user; JANGAN mengarang pesaing lain.
+   5. Jika klaim user bertentangan dengan DATA TERUKUR (mis. "tidak ada kompetitor" padahal data mencatat beberapa), tambahkan contextWarnings.
+   6. Di dataAssumptions tulis: "Data tempat sekitar: tempat bernama yang tercatat di %[1]s, radius %[2]d m dari titik; bukan sensus lengkap (tempat tanpa nama/bangunan baru bisa belum tercatat)."
+   7. Pertimbangkan jarak ke FamilyMart terdekat untuk risiko kanibalisasi (< 500 m = risiko tinggi).`, src, m.RadiusM)
 }

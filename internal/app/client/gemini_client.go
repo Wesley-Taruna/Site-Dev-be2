@@ -20,6 +20,8 @@ type GeminiInput struct {
 	Context     *model.SiteContext
 	Competitors []*model.SiteCompetitor
 	Notes       []*model.SiteCustomNote
+	// Measured is the nearby map data (local §6); nil = the original prompt.
+	Measured *dto.NearbyMeasured
 }
 
 // IGeminiClient turns a site into a feasibility insight with Google Gemini.

@@ -127,3 +127,22 @@ const (
 	DuplicateCheckOff     = "off"     // default: submit exactly as before
 	DuplicateCheckConfirm = "confirm" // 409 unless confirm_duplicate = true
 )
+
+// Nearby place categories (local §6), in the order of answers and prompt.
+const (
+	NearbyCategoryCompetitor = "competitor"
+	NearbyCategoryOffice     = "office"
+	NearbyCategorySchool     = "school"
+	NearbyCategoryUniversity = "university"
+	NearbyCategoryApartment  = "apartment"
+)
+
+// NearbyCategories is the fixed category order.
+var NearbyCategories = []string{NearbyCategoryCompetitor, NearbyCategoryOffice, NearbyCategorySchool, NearbyCategoryUniversity, NearbyCategoryApartment}
+
+// Nearby place data sources.
+const (
+	NearbySourceGoogle = "google"
+	NearbySourceOSM    = "osm"
+	NearbySourceMixed  = "mixed" // some categories from Google, the rest from OSM
+)
