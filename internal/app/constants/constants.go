@@ -98,3 +98,16 @@ const (
 func QuotaSettingKey(kind string) string {
 	return kind + ".daily_quota"
 }
+
+// SiteAIMetrics.MetricKey values (the fixed metric names of the Gemini
+// answer), in the order they are stored.
+const (
+	MetricKeyFootTraffic   = "footTraffic"
+	MetricKeyDemographics  = "demographics"
+	MetricKeyCompetition   = "competition"
+	MetricKeyAccessibility = "accessibility"
+	MetricKeyEconomic      = "economic"
+)
+
+// MetricKeyOrder is the order the 5 metrics are written in.
+var MetricKeyOrder = []string{MetricKeyFootTraffic, MetricKeyDemographics, MetricKeyCompetition, MetricKeyAccessibility, MetricKeyEconomic}

@@ -15,6 +15,7 @@ type Clients struct {
 	// them through the New...Client constructors):
 	ApprovalJWT IApprovalJWTClient // fami-module token for approval-link login
 	Storage     IStorageClient     // site photos (TODO: Google Cloud Storage, plan Q4)
+	Gemini      IGeminiClient      // AI insight (TODO: the HTTP call, plan Q4)
 }
 
 // NewClients builds every client from the config; called once at start
@@ -23,5 +24,6 @@ func NewClients(env env.Provider) Clients {
 	return Clients{
 		ApprovalJWT: NewApprovalJWTClient(env),
 		Storage:     NewStorageClient(env),
+		Gemini:      NewGeminiClient(env),
 	}
 }
