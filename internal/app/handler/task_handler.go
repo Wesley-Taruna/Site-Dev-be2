@@ -13,14 +13,16 @@ import (
 )
 
 type TaskHandler struct {
-	Option       global.HandlerOptions
-	ServicesTask service.ITaskService
+	Option              global.HandlerOptions
+	ServicesTask        service.ITaskService
+	ServicesSiteContext service.ISiteContextService
 }
 
 // URLMapping implements router.RouteHandlers
 func (h *TaskHandler) URLMapping(r *echo.Group) {
 	h.Option = global.Setup
 	h.ServicesTask = service.NewTaskService()
+	h.ServicesSiteContext = service.NewSiteContextService()
 
 	h.routes(r, middleware.NewMiddleware())
 }
@@ -35,6 +37,27 @@ func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/history", h.History, mw.Authorized())
 	r.GET("/:id/attachment", h.Attachment, mw.Authorized())
+	r.PUT("/context/:site_id", h.UpdateContext, mw.Authorized())
+}
+
+// UpdateContext is PUT /v1/task/context/:site_id: replaces the on-site
+// survey (creator only, DRAFT/REVISION only).
+func (h TaskHandler) UpdateContext(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.SiteContextRequestUpsert
+	if err = ctx.Bind(&req); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	ctx.ResponseData, err = h.ServicesSiteContext.Update(ctx.Request().Context(), ctx.GetUriParamString("site_id"), req, userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
 }
 
 // Index is GET /v1/task: the caller's task list (site staff see only their

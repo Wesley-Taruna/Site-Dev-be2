@@ -17,6 +17,13 @@ type ISiteContextRepository interface {
 	// lists, oldest first.
 	GetCompetitorsBySiteID(ctx context.Context, siteID string) (competitors []*model.SiteCompetitor, err error)
 	GetCustomNotesBySiteID(ctx context.Context, siteID string) (notes []*model.SiteCustomNote, err error)
+	// Upsert creates the survey row or overwrites every field (a map
+	// update, so a field can be emptied again).
+	Upsert(ctx context.Context, siteContext *model.SiteContext) (err error)
+	// ReplaceCompetitors / ReplaceCustomNotes delete the site's list and
+	// insert the new one (the form is saved as a whole).
+	ReplaceCompetitors(ctx context.Context, siteID string, competitors []*model.SiteCompetitor) (err error)
+	ReplaceCustomNotes(ctx context.Context, siteID string, notes []*model.SiteCustomNote) (err error)
 }
 
 type SiteContextRepository struct {
@@ -66,6 +73,84 @@ func (r *SiteContextRepository) GetCustomNotesBySiteID(ctx context.Context, site
 	db := readDB(ctx, r.opt)
 
 	if err = db.Where("SiteID = ?", siteID).Order("ID ASC").Find(&notes).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteContextRepository) Upsert(ctx context.Context, siteContext *model.SiteContext) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteContextRepository.Upsert")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	var count int64
+	if err = db.Model(new(model.SiteContext)).Where("SiteID = ?", siteContext.SiteID).Count(&count).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	if count == 0 {
+		if err = db.Create(siteContext).Error; err != nil {
+			span.RecordError(err)
+		}
+		return
+	}
+
+	updates := map[string]interface{}{
+		"FootTrafficObservation": siteContext.FootTrafficObservation,
+		"PeakHours":              siteContext.PeakHours,
+		"ParkingAvailability":    siteContext.ParkingAvailability,
+		"PublicTransport":        siteContext.PublicTransport,
+		"AnchorLandmark":         siteContext.AnchorLandmark,
+		"ObservedDemographics":   siteContext.ObservedDemographics,
+		"UpdatedBy":              siteContext.UpdatedBy,
+		"UpdatedAt":              siteContext.UpdatedAt,
+	}
+	if err = db.Model(new(model.SiteContext)).Where("SiteID = ?", siteContext.SiteID).Updates(updates).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteContextRepository) ReplaceCompetitors(ctx context.Context, siteID string, competitors []*model.SiteCompetitor) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteContextRepository.ReplaceCompetitors")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Where("SiteID = ?", siteID).Delete(new(model.SiteCompetitor)).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	if len(competitors) == 0 {
+		return
+	}
+	if err = db.Create(&competitors).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *SiteContextRepository) ReplaceCustomNotes(ctx context.Context, siteID string, notes []*model.SiteCustomNote) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteContextRepository.ReplaceCustomNotes")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Where("SiteID = ?", siteID).Delete(new(model.SiteCustomNote)).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	if len(notes) == 0 {
+		return
+	}
+	if err = db.Create(&notes).Error; err != nil {
 		span.RecordError(err)
 		return
 	}

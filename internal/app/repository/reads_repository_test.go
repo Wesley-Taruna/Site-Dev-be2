@@ -131,3 +131,16 @@ func TestSiteRepositoryGetActiveStores_CountFailure(t *testing.T) {
 	assert.ErrorIs(t, err, dbErr)
 	assert.Len(t, rec.sqls, 1)
 }
+
+func TestSiteContextRepositoryReplace_EmptyListOnlyDeletes(t *testing.T) {
+	o, rec := fakeDBOptions(t)
+	r := &SiteContextRepository{opt: o}
+
+	require.NoError(t, r.ReplaceCompetitors(context.Background(), "ST1", nil))
+	require.NoError(t, r.ReplaceCustomNotes(context.Background(), "ST1", nil))
+
+	assert.Equal(t, []string{
+		`DELETE FROM "SiteCompetitors" WHERE SiteID = 'ST1'`,
+		`DELETE FROM "SiteCustomNotes" WHERE SiteID = 'ST1'`,
+	}, rec.sqls)
+}

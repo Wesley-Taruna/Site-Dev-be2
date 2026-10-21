@@ -47,6 +47,20 @@ func (_m *ITaskHistoryRepository) Get(ctx context.Context, offset int, limit int
 	return r0, ret.Get(1).(int64), ret.Error(2)
 }
 
+// Create provides a mock function with given fields: ctx, history
+func (_m *ITaskHistoryRepository) Create(ctx context.Context, history *model.TaskHistory) error {
+	ret := _m.Called(ctx, history)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.TaskHistory) error); ok {
+		r0 = rf(ctx, history)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewITaskHistoryRepository creates a new instance of ITaskHistoryRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewITaskHistoryRepository(t interface {
 	mock.TestingT

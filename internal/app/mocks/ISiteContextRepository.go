@@ -62,6 +62,48 @@ func (_m *ISiteContextRepository) GetCustomNotesBySiteID(ctx context.Context, si
 	return r0, ret.Error(1)
 }
 
+// Upsert provides a mock function with given fields: ctx, siteContext
+func (_m *ISiteContextRepository) Upsert(ctx context.Context, siteContext *model.SiteContext) error {
+	ret := _m.Called(ctx, siteContext)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.SiteContext) error); ok {
+		r0 = rf(ctx, siteContext)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// ReplaceCompetitors provides a mock function with given fields: ctx, siteID, competitors
+func (_m *ISiteContextRepository) ReplaceCompetitors(ctx context.Context, siteID string, competitors []*model.SiteCompetitor) error {
+	ret := _m.Called(ctx, siteID, competitors)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, []*model.SiteCompetitor) error); ok {
+		r0 = rf(ctx, siteID, competitors)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// ReplaceCustomNotes provides a mock function with given fields: ctx, siteID, notes
+func (_m *ISiteContextRepository) ReplaceCustomNotes(ctx context.Context, siteID string, notes []*model.SiteCustomNote) error {
+	ret := _m.Called(ctx, siteID, notes)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, []*model.SiteCustomNote) error); ok {
+		r0 = rf(ctx, siteID, notes)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewISiteContextRepository creates a new instance of ISiteContextRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteContextRepository(t interface {
 	mock.TestingT

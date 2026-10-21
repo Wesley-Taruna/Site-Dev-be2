@@ -14,6 +14,8 @@ type ITaskHistoryRepository interface {
 	GetByTaskID(ctx context.Context, taskID string) (histories []*model.TaskHistory, err error)
 	// Get lists history rows of every task, with the total count.
 	Get(ctx context.Context, offset int, limit int, orderBy string) (histories []*model.TaskHistory, count int64, err error)
+	// Create appends a history row (rows are never changed).
+	Create(ctx context.Context, history *model.TaskHistory) (err error)
 }
 
 type TaskHistoryRepository struct {
@@ -62,6 +64,20 @@ func (r *TaskHistoryRepository) Get(ctx context.Context, offset int, limit int, 
 	}
 
 	if err = db.Find(&histories).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *TaskHistoryRepository) Create(ctx context.Context, history *model.TaskHistory) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskHistoryRepository.Create")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	if err = db.Create(history).Error; err != nil {
 		span.RecordError(err)
 		return
 	}
