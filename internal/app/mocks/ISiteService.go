@@ -69,6 +69,17 @@ func (_m *ISiteService) GetActiveStores(ctx context.Context, req dto.ListRequest
 	return r0, ret.Get(1).(int64), ret.Error(2)
 }
 
+// UpsertWithStatus provides a mock function with given fields: ctx, req, status, actorID
+func (_m *ISiteService) UpsertWithStatus(ctx context.Context, req dto.SiteRequestUpsert, status string, actorID int64) (dto.SiteUpsertResponse, error) {
+	ret := _m.Called(ctx, req, status, actorID)
+
+	if rf, ok := ret.Get(0).(func(context.Context, dto.SiteRequestUpsert, string, int64) (dto.SiteUpsertResponse, error)); ok {
+		return rf(ctx, req, status, actorID)
+	}
+
+	return ret.Get(0).(dto.SiteUpsertResponse), ret.Error(1)
+}
+
 // NewISiteService creates a new instance of ISiteService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteService(t interface {
 	mock.TestingT

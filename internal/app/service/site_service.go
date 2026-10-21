@@ -25,17 +25,35 @@ type ISiteService interface {
 	// GetActiveStores is GET /v1/site/active-list ("Site Active" table,
 	// straight from AMFIBI_MASTER).
 	GetActiveStores(ctx context.Context, req dto.ListRequestGet) (res []dto.SiteMapResponseGet, total int64, err error)
+	// UpsertWithStatus is POST /v1/task/:status (DRAFT or SUBMITED): saves
+	// the site, survey and attachments and its task in one transaction;
+	// SUBMITED also opens the approval round.
+	UpsertWithStatus(ctx context.Context, req dto.SiteRequestUpsert, status string, actorID int64) (res dto.SiteUpsertResponse, err error)
 }
 
 type SiteService struct {
-	opt            opt.Options
-	RepositorySite repository.ISiteRepository
+	opt                     opt.Options
+	RepositorySite          repository.ISiteRepository
+	RepositoryTask          repository.ITaskRepository
+	RepositorySiteContext   repository.ISiteContextRepository
+	RepositorySiteAIInsight repository.ISiteAIInsightRepository
+	RepositoryRunningID     repository.IRunningIDRepository
+	RepositoryUser          repository.IUserRepository
+	RepositoryTransaction   repository.ITransactionRepository
+	taskService             *TaskService
 }
 
 func NewSiteService() ISiteService {
 	return &SiteService{
-		opt:            global.Setup.Common,
-		RepositorySite: repository.NewSiteRepository(),
+		opt:                     global.Setup.Common,
+		RepositorySite:          repository.NewSiteRepository(),
+		RepositoryTask:          repository.NewTaskRepository(),
+		RepositorySiteContext:   repository.NewSiteContextRepository(),
+		RepositorySiteAIInsight: repository.NewSiteAIInsightRepository(),
+		RepositoryRunningID:     repository.NewRunningIDRepository(),
+		RepositoryUser:          repository.NewUserRepository(),
+		RepositoryTransaction:   repository.NewTransactionRepository(),
+		taskService:             newTaskService(),
 	}
 }
 

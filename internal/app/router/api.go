@@ -20,4 +20,5 @@ func init() {
 	handlers["validation"] = &handler.ValidationHandler{}
 	handlers["upload"] = &handler.UploadHandler{}
 	handlers["attachment"] = &handler.AttachmentHandler{}
+	handlers["queue"] = &handler.QueueHandler{}
 }

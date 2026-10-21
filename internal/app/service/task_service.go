@@ -49,6 +49,10 @@ type ITaskService interface {
 	// GetDashboardStatusCount is GET /v1/dashboard/task/status/count: every
 	// task, no role filter.
 	GetDashboardStatusCount(ctx context.Context) (res []dto.TaskStatusCountResponseGet, err error)
+	// Approve is POST /v1/task/:id/approve (id = task_id): the caller's
+	// decision on the level waiting for them; APPROVE moves to the next
+	// level or completes the task.
+	Approve(ctx context.Context, taskID string, actorID int64, req dto.TaskActionRequest) (err error)
 }
 
 type TaskService struct {
@@ -59,9 +63,17 @@ type TaskService struct {
 	RepositoryUser        repository.IUserRepository
 	RepositorySiteContext repository.ISiteContextRepository
 	RepositoryApproval    repository.IApprovalRepository
+	RepositoryTransaction repository.ITransactionRepository
+	workflow              *taskWorkflow
 }
 
 func NewTaskService() ITaskService {
+	return newTaskService()
+}
+
+// newTaskService is NewTaskService as the concrete type (SiteService reuses
+// its task detail).
+func newTaskService() *TaskService {
 	return &TaskService{
 		opt:                   global.Setup.Common,
 		RepositoryTask:        repository.NewTaskRepository(),
@@ -70,6 +82,8 @@ func NewTaskService() ITaskService {
 		RepositoryUser:        repository.NewUserRepository(),
 		RepositorySiteContext: repository.NewSiteContextRepository(),
 		RepositoryApproval:    repository.NewApprovalRepository(),
+		RepositoryTransaction: repository.NewTransactionRepository(),
+		workflow:              newTaskWorkflow(),
 	}
 }
 

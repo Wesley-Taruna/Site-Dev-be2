@@ -2,13 +2,13 @@ package handler
 
 import (
 	"site-dev-backend/global"
+	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 	"site-dev-backend/internal/app/middleware"
 	"site-dev-backend/internal/app/service"
 
 	"github.com/labstack/echo/v4"
 	"gitlab.com/fami-app-v2/familib/familabs"
-	"gitlab.com/fami-app-v2/familib/familabs/constants"
 	"gitlab.com/fami-app-v2/familib/familabs/log"
 )
 
@@ -17,6 +17,7 @@ type TaskHandler struct {
 	ServicesTask        service.ITaskService
 	ServicesSiteContext service.ISiteContextService
 	ServicesAIInsight   service.IAIInsightService
+	ServicesSite        service.ISiteService
 }
 
 // URLMapping implements router.RouteHandlers
@@ -25,6 +26,7 @@ func (h *TaskHandler) URLMapping(r *echo.Group) {
 	h.ServicesTask = service.NewTaskService()
 	h.ServicesSiteContext = service.NewSiteContextService()
 	h.ServicesAIInsight = service.NewAIInsightService()
+	h.ServicesSite = service.NewSiteService()
 
 	h.routes(r, middleware.NewMiddleware())
 }
@@ -44,6 +46,52 @@ func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.POST("/ai-insight/preview", h.PreviewAIInsight, mw.Authorized())
 	r.GET("/ai-insight/quota", h.AIInsightQuota, mw.Authorized())
 	r.GET("/ai-insight/:site_id", h.AIInsight, mw.Authorized())
+	r.POST("/:status", h.Save, mw.Authorized())
+	r.POST("/:id/approve", h.Approve, mw.Authorized())
+}
+
+// Save is POST /v1/task/:status (DRAFT or SUBMITED) {site, context,
+// attachment, notes, insight}: site.site_id empty = new site.
+func (h TaskHandler) Save(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	status := ctx.GetUriParamString("status")
+	if status != constants.TaskStatusDraft && status != constants.TaskStatusSubmited {
+		return ctx.Serve(familabs.ErrorInvalid("status (must be DRAFT or SUBMITED)"))
+	}
+
+	var req dto.SiteRequestUpsert
+	if err = ctx.Bind(&req); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	ctx.ResponseData, err = h.ServicesSite.UpsertWithStatus(ctx.Request().Context(), req, status, userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// Approve is POST /v1/task/:id/approve {decision, notes} (id = task_id).
+// The answer has no data, as in site-dev-api.
+func (h TaskHandler) Approve(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.TaskActionRequest
+	if err = ctx.Bind(&req); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	if err = h.ServicesTask.Approve(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx), req); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
 }
 
 // GenerateAIInsight is POST /v1/task/ai-insight {site_id}: a new Gemini
@@ -305,27 +353,4 @@ func (h TaskHandler) ApprovalHistory(c echo.Context) (err error) {
 	ctx.DataList(rows, total, page)
 
 	return ctx.Serve(err)
-}
-
-// listRequest reads page, sort_by, sort_dir and q of a paged list.
-func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.Paginator, err error) {
-	page, err = familabs.NewPaginator(ctx)
-	if err != nil {
-		return
-	}
-
-	req = dto.ListRequestGet{
-		Page:    page.Page,
-		SortBy:  ctx.GetParamString("sort_by"),
-		SortDir: ctx.GetParamString("sort_dir"),
-		Search:  ctx.GetParamString("q"),
-	}
-	return
-}
-
-// userIDFromContext reads the user ID that middlewarex.Authorization (used
-// by Middleware.Authorized) stores in the request context.
-func userIDFromContext(ctx *familabs.Context) int64 {
-	userID, _ := ctx.Request().Context().Value(constants.KeyUserID).(int64)
-	return userID
 }

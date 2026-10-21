@@ -163,6 +163,20 @@ func (_m *ITaskService) GetDashboardStatusCount(ctx context.Context) ([]dto.Task
 	return r0, ret.Error(1)
 }
 
+// Approve provides a mock function with given fields: ctx, taskID, actorID, req
+func (_m *ITaskService) Approve(ctx context.Context, taskID string, actorID int64, req dto.TaskActionRequest) error {
+	ret := _m.Called(ctx, taskID, actorID, req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64, dto.TaskActionRequest) error); ok {
+		r0 = rf(ctx, taskID, actorID, req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewITaskService creates a new instance of ITaskService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewITaskService(t interface {
 	mock.TestingT
