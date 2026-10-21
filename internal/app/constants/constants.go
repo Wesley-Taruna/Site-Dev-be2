@@ -82,3 +82,19 @@ var SiteListRequestStatuses = []string{
 	TaskStatusRevision,
 	TaskStatusCompleted,
 }
+
+// Daily quotas (per user, per day in Asia/Jakarta). The limit is read from
+// SystemSettings (key <kind>.daily_quota), then env.toml [<kind>]
+// daily_quota, then the default here.
+const (
+	QuotaAIInsight = "ai_insight"
+	QuotaGeocoding = "geocoding"
+
+	DefaultAIInsightDailyQuota = 50
+	DefaultGeocodingDailyQuota = 100
+)
+
+// QuotaSettingKey is the SystemSettings key of a quota kind's daily limit.
+func QuotaSettingKey(kind string) string {
+	return kind + ".daily_quota"
+}

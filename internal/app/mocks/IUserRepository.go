@@ -32,6 +32,63 @@ func (_m *IUserRepository) GetByID(ctx context.Context, userID int64) (*model.Us
 	return r0, ret.Error(1)
 }
 
+// Get provides a mock function with given fields: ctx
+func (_m *IUserRepository) Get(ctx context.Context) ([]*model.User, error) {
+	ret := _m.Called(ctx)
+
+	if rf, ok := ret.Get(0).(func(context.Context) ([]*model.User, error)); ok {
+		return rf(ctx)
+	}
+
+	var r0 []*model.User
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.User)
+	}
+	return r0, ret.Error(1)
+}
+
+// Create provides a mock function with given fields: ctx, user
+func (_m *IUserRepository) Create(ctx context.Context, user *model.User) error {
+	ret := _m.Called(ctx, user)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *model.User) error); ok {
+		r0 = rf(ctx, user)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Update provides a mock function with given fields: ctx, userID, updates
+func (_m *IUserRepository) Update(ctx context.Context, userID int64, updates map[string]interface{}) error {
+	ret := _m.Called(ctx, userID, updates)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, map[string]interface{}) error); ok {
+		r0 = rf(ctx, userID, updates)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// Delete provides a mock function with given fields: ctx, userID
+func (_m *IUserRepository) Delete(ctx context.Context, userID int64) error {
+	ret := _m.Called(ctx, userID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64) error); ok {
+		r0 = rf(ctx, userID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewIUserRepository creates a new instance of IUserRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewIUserRepository(t interface {
 	mock.TestingT

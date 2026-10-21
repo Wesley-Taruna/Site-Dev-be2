@@ -22,12 +22,13 @@ import (
 
 // Server is one in-memory Redis. Close it when the test ends.
 type Server struct {
-	ln   net.Listener
-	mu   sync.Mutex
-	data map[string]string
-	ttl  map[string]time.Duration
-	cmds []string
-	wg   sync.WaitGroup
+	ln    net.Listener
+	mu    sync.Mutex
+	data  map[string]string
+	ttl   map[string]time.Duration
+	cmds  []string
+	conns map[net.Conn]struct{}
+	wg    sync.WaitGroup
 }
 
 // Start listens on a free local port.
@@ -36,7 +37,7 @@ func Start() (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{ln: ln, data: map[string]string{}, ttl: map[string]time.Duration{}}
+	s := &Server{ln: ln, data: map[string]string{}, ttl: map[string]time.Duration{}, conns: map[net.Conn]struct{}{}}
 	s.wg.Add(1)
 	go s.serve()
 	return s, nil
@@ -45,9 +46,14 @@ func Start() (*Server, error) {
 // Addr is the host:port to give to the Redis client.
 func (s *Server) Addr() string { return s.ln.Addr().String() }
 
-// Close stops the server.
+// Close stops the server and drops open client connections.
 func (s *Server) Close() {
 	_ = s.ln.Close()
+	s.mu.Lock()
+	for c := range s.conns {
+		_ = c.Close()
+	}
+	s.mu.Unlock()
 	s.wg.Wait()
 }
 
@@ -99,10 +105,16 @@ func (s *Server) serve() {
 		if err != nil {
 			return
 		}
+		s.mu.Lock()
+		s.conns[c] = struct{}{}
+		s.mu.Unlock()
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			s.handle(c)
+			s.mu.Lock()
+			delete(s.conns, c)
+			s.mu.Unlock()
 		}()
 	}
 }
