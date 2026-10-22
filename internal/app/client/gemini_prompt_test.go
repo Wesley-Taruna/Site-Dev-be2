@@ -80,8 +80,47 @@ func TestPromptSameAsSiteDevAPI(t *testing.T) {
 	site, ctx, comps, notes := promptFixtureSite()
 	want, err := os.ReadFile("testdata/prompt_original_with_context.golden")
 	require.NoError(t, err)
-	assert.Equal(t, string(want), buildPrompt(site, ctx, comps, notes, nil))
+	assert.Equal(t, novemberPrompt(string(want)), buildPrompt(site, ctx, comps, notes, nil))
 	want, err = os.ReadFile("testdata/prompt_original_no_context.golden")
 	require.NoError(t, err)
-	assert.Equal(t, string(want), buildPrompt(site, nil, nil, nil, nil))
+	assert.Equal(t, novemberPrompt(string(want)), buildPrompt(site, nil, nil, nil, nil))
+}
+
+// novemberPrompt is the 20eeab4 prompt with exactly the November changes
+// (API-CHANGES §13.5): the B1 score formula with the 6th metric and rule H
+// after rule D. Nothing else may differ.
+func novemberPrompt(old string) string {
+	s := strings.Replace(old, "   1. overallScore = round(average dari 5 metrik). Tidak boleh menyimpang lebih dari 1 poin.",
+		"   1. overallScore = round(0.18 × (footTraffic + demographics + competition + accessibility + economic) + 0.10 × vehicleTraffic). Tidak boleh menyimpang lebih dari 1 poin. (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)", 1)
+	return strings.Replace(s, "\n\n============================\nOUTPUT:", "\n\n"+ruleH+"\n\n============================\nOUTPUT:", 1)
+}
+
+func TestPrompt_NovemberSurveyFields(t *testing.T) {
+	site, ctx, comps, notes := promptFixtureSite()
+	busy, pnote, cnote, tnote := "BUSY", "parkir motor 6", "Alfamart tutup", "bus sering berhenti"
+	n, m := 120, 10
+	ctx.VehicleTrafficLevel, ctx.VehicleTrafficCount, ctx.VehicleTrafficMinutes, ctx.VehicleTrafficNote = &busy, &n, &m, &tnote
+	ctx.ParkingNote, ctx.CompetitorNote = &pnote, &cnote
+
+	p := buildPrompt(site, ctx, comps, notes, nil)
+
+	for _, want := range []string{
+		"- Lalu lintas kendaraan di jalan depan lokasi: Ramai; dihitung 120 kendaraan dalam 10 menit (± 720 kendaraan/jam)",
+		"    • Catatan lalu lintas: bus sering berhenti",
+		"- Ketersediaan parkir: Terbatas\n    • Catatan parkir: parkir motor 6",
+		`- CATATAN KOMPETITOR DARI SITE STAFF (teks bebas, BELUM DIVERIFIKASI, lihat aturan G): "Alfamart tutup"`,
+		"G) CATATAN KOMPETITOR STAF:",
+		"H) LALU LINTAS KENDARAAN",
+	} {
+		assert.Contains(t, p, want)
+	}
+	assert.Contains(t, string(mustJSON(t, responseSchema)), `"vehicleTraffic"`)
+	// only the traffic level counts as context
+	assert.True(t, hasContext(&model.SiteContext{VehicleTrafficLevel: &busy}, nil, nil))
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	b, err := json.Marshal(v)
+	require.NoError(t, err)
+	return b
 }

@@ -52,6 +52,12 @@ func toSiteContextResponse(m *model.SiteContext, competitors []*model.SiteCompet
 	if m.ParkingAvailability != nil {
 		res.ParkingAvailability = *m.ParkingAvailability
 	}
+	res.VehicleTrafficLevel = valueOf(m.VehicleTrafficLevel)
+	res.VehicleTrafficCount = m.VehicleTrafficCount
+	res.VehicleTrafficMinutes = m.VehicleTrafficMinutes
+	res.VehicleTrafficNote = valueOf(m.VehicleTrafficNote)
+	res.ParkingNote = valueOf(m.ParkingNote)
+	res.CompetitorNote = valueOf(m.CompetitorNote)
 	for _, c := range competitors {
 		res.Competitors = append(res.Competitors, dto.CompetitorResponseGet{
 			ID:             c.ID,

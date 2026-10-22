@@ -105,8 +105,15 @@ func (r *SiteContextRepository) Upsert(ctx context.Context, siteContext *model.S
 		"PublicTransport":        siteContext.PublicTransport,
 		"AnchorLandmark":         siteContext.AnchorLandmark,
 		"ObservedDemographics":   siteContext.ObservedDemographics,
-		"UpdatedBy":              siteContext.UpdatedBy,
-		"UpdatedAt":              siteContext.UpdatedAt,
+		// November scope (API-CHANGES §13.5)
+		"VehicleTrafficLevel":   siteContext.VehicleTrafficLevel,
+		"VehicleTrafficCount":   siteContext.VehicleTrafficCount,
+		"VehicleTrafficMinutes": siteContext.VehicleTrafficMinutes,
+		"VehicleTrafficNote":    siteContext.VehicleTrafficNote,
+		"ParkingNote":           siteContext.ParkingNote,
+		"CompetitorNote":        siteContext.CompetitorNote,
+		"UpdatedBy":             siteContext.UpdatedBy,
+		"UpdatedAt":             siteContext.UpdatedAt,
 	}
 	if err = db.Model(new(model.SiteContext)).Where("SiteID = ?", siteContext.SiteID).Updates(updates).Error; err != nil {
 		span.RecordError(err)

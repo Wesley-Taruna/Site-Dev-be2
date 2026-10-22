@@ -46,6 +46,11 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 	}
 	actorName := actor.Username
 	w := s.taskService.workflow
+
+	if status == constants.TaskStatusSubmited && s.trafficRequiredOnSubmit && (req.Context == nil || req.Context.VehicleTrafficLevel == "") {
+		err = echo.NewHTTPError(http.StatusBadRequest, "Lalu lintas kendaraan wajib diisi sebelum dikirim.")
+		return
+	}
 	isUpdate := req.Site.SiteID != ""
 
 	var site model.Site

@@ -22,12 +22,18 @@ func TestParseDistanceKm(t *testing.T) {
 
 func TestMetricRows_FixedOrder(t *testing.T) {
 	rows := metricRows(7, dto.AIInsightMetrics{Economic: dto.AIInsightMetric{Label: "Eko", Factors: []string{"a", "b"}}})
-	require.Len(t, rows, 5)
-	for i, key := range constants.MetricKeyOrder {
+	require.Len(t, rows, 5) // no vehicleTraffic: 5 rows as before
+	for i, key := range constants.MetricKeyOrder[:5] {
 		assert.Equal(t, key, rows[i].MetricKey)
 		assert.Equal(t, int64(7), rows[i].SiteAIID)
 	}
 	assert.Equal(t, "a;b", rows[4].Factors)
+
+	// November scope: the 6th metric is the 6th row
+	rows = metricRows(7, dto.AIInsightMetrics{VehicleTraffic: &dto.AIInsightMetric{Label: "Lalu Lintas Kendaraan", Score: 72}})
+	require.Len(t, rows, 6)
+	assert.Equal(t, "vehicleTraffic", rows[5].MetricKey)
+	assert.Equal(t, 72, rows[5].Score)
 }
 
 func TestAIInsightServicePersist_UsesSiteIDAndNoModel(t *testing.T) {

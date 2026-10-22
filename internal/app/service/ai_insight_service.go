@@ -200,9 +200,12 @@ func (s *AIInsightService) persist(ctx context.Context, insight *dto.AIInsightRe
 	return
 }
 
-// metricByKey points at one of the 5 metrics.
+// metricByKey points at one of the metrics (nil for an unknown key, and
+// for vehicleTraffic while the insight has none).
 func metricByKey(m *dto.AIInsightMetrics, key string) *dto.AIInsightMetric {
 	switch key {
+	case constants.MetricKeyVehicleTraffic:
+		return m.VehicleTraffic
 	case constants.MetricKeyFootTraffic:
 		return &m.FootTraffic
 	case constants.MetricKeyDemographics:
@@ -217,11 +220,15 @@ func metricByKey(m *dto.AIInsightMetrics, key string) *dto.AIInsightMetric {
 	return nil
 }
 
-// metricRows is the 5 SiteAIMetrics rows of an insight, in fixed order.
+// metricRows is the SiteAIMetrics rows of an insight (5, or 6 with
+// vehicleTraffic), in fixed order.
 func metricRows(siteAIID int64, m dto.AIInsightMetrics) []*model.SiteAIMetric {
 	rows := make([]*model.SiteAIMetric, 0, len(constants.MetricKeyOrder))
 	for _, key := range constants.MetricKeyOrder {
 		src := metricByKey(&m, key)
+		if src == nil {
+			continue
+		}
 		rows = append(rows, &model.SiteAIMetric{
 			SiteAIID:  siteAIID,
 			MetricKey: key,
@@ -302,6 +309,9 @@ func (s *AIInsightService) get(ctx context.Context, siteID string) (res dto.AIIn
 		ContextWarnings:  make([]dto.AIInsightContextWarning, 0, len(warnings)),
 	}
 	for _, m := range metrics {
+		if m.MetricKey == constants.MetricKeyVehicleTraffic {
+			res.Metrics.VehicleTraffic = &dto.AIInsightMetric{}
+		}
 		if dst := metricByKey(&res.Metrics, m.MetricKey); dst != nil {
 			*dst = dto.AIInsightMetric{Label: m.Label, Score: m.Score, Band: m.Band, Summary: m.Summary, Factors: strings.Split(m.Factors, factorsSep)}
 		}

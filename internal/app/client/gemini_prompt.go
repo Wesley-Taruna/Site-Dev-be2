@@ -8,6 +8,7 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -29,7 +30,7 @@ func ifNotEmpty(val, fallback string) string {
 var responseSchema = map[string]any{
 	"type": "OBJECT",
 	"properties": map[string]any{
-		"overallScore": map[string]any{"type": "INTEGER", "description": "Skor keseluruhan 0-100 — WAJIB = round(rata-rata 5 metrik)"},
+		"overallScore": map[string]any{"type": "INTEGER", "description": "Skor keseluruhan 0-100 — WAJIB = " + overallScoreFormula},
 		"recommendation": map[string]any{
 			"type": "STRING",
 			"enum": []string{"Strongly Recommended", "Recommended", "Proceed With Caution", "Reconsider"},
@@ -39,13 +40,14 @@ var responseSchema = map[string]any{
 		"metrics": map[string]any{
 			"type": "OBJECT",
 			"properties": map[string]any{
-				"footTraffic":   metricSchema,
-				"demographics":  metricSchema,
-				"competition":   metricSchema,
-				"accessibility": metricSchema,
-				"economic":      metricSchema,
+				"footTraffic":    metricSchema,
+				"vehicleTraffic": metricSchema,
+				"demographics":   metricSchema,
+				"competition":    metricSchema,
+				"accessibility":  metricSchema,
+				"economic":       metricSchema,
 			},
-			"required": []string{"footTraffic", "demographics", "competition", "accessibility", "economic"},
+			"required": []string{"footTraffic", "vehicleTraffic", "demographics", "competition", "accessibility", "economic"},
 		},
 		"competitors": map[string]any{
 			"type": "ARRAY",
@@ -123,6 +125,62 @@ var contextWarningSchema = map[string]any{
 	"required": []string{"field", "userClaim", "aiExpectation", "severity", "message"},
 }
 
+// overallScoreFormula is the overall score with the 6th metric (November
+// scope, API-CHANGES §13.5; weights in constants, open for Wes). Was
+// "round(rata-rata 5 metrik)".
+var overallScoreFormula = "round(" + constants.ScoreWeightMainMetric + " × (footTraffic + demographics + competition + accessibility + economic) + " +
+	constants.ScoreWeightVehicleTraffic + " × vehicleTraffic)"
+
+// trafficLabels are the prompt words of the vehicle traffic levels
+// (prototype src/lib/traffic.ts TRAFFIC_LEVELS .ai).
+var trafficLabels = map[string]string{
+	constants.VehicleTrafficQuiet:    "Sepi (jarang kendaraan lewat)",
+	constants.VehicleTrafficModerate: "Sedang",
+	constants.VehicleTrafficBusy:     "Ramai",
+	constants.VehicleTrafficVeryBusy: "Sangat ramai (padat / sering macet)",
+}
+
+// trafficLines are the survey lines on vehicle traffic (prototype
+// formatContext, 20-21 Oct), empty when no level was given.
+func trafficLines(siteCtx *model.SiteContext) []string {
+	if siteCtx.VehicleTrafficLevel == nil || *siteCtx.VehicleTrafficLevel == "" {
+		return nil
+	}
+	label := trafficLabels[*siteCtx.VehicleTrafficLevel]
+	if label == "" {
+		label = *siteCtx.VehicleTrafficLevel
+	}
+	count := ""
+	if n, m := siteCtx.VehicleTrafficCount, siteCtx.VehicleTrafficMinutes; n != nil && m != nil && *m > 0 {
+		perHour := int(math.Round(float64(*n) * 60 / float64(*m)))
+		count = fmt.Sprintf("; dihitung %d kendaraan dalam %d menit (± %d kendaraan/jam)", *n, *m, perHour)
+	}
+	lines := []string{fmt.Sprintf("- Lalu lintas kendaraan di jalan depan lokasi: %s%s", label, count)}
+	if siteCtx.VehicleTrafficNote != nil && *siteCtx.VehicleTrafficNote != "" {
+		lines = append(lines, fmt.Sprintf("    • Catatan lalu lintas: %s", *siteCtx.VehicleTrafficNote))
+	}
+	return lines
+}
+
+// competitorNoteOf is the staff's competitor note, "" when none.
+func competitorNoteOf(siteCtx *model.SiteContext) string {
+	if siteCtx == nil || siteCtx.CompetitorNote == nil {
+		return ""
+	}
+	return *siteCtx.CompetitorNote
+}
+
+// ruleG: the staff's competitor note is unverified and never changes the
+// competitor count (prototype rule G, 19 Oct).
+const ruleG = `G) CATATAN KOMPETITOR STAF: catatan ini hanya keterangan Site Staff yang BELUM DIVERIFIKASI. JANGAN mengubah jumlah atau daftar kompetitor karenanya (kompetitor yang disebut "tutup/renovasi" tetap dihitung; kompetitor yang tidak ada di data peta tidak ditambahkan). Boleh disebut di narrative/risks/dataAssumptions, tetapi WAJIB ditulis sebagai catatan staf, mis. "Menurut catatan Site Staff (belum diverifikasi): …".`
+
+// ruleH: how to score vehicle traffic (prototype rule H, 20 Oct).
+const ruleH = `H) LALU LINTAS KENDARAAN (vehicleTraffic, label "Lalu Lintas Kendaraan"): nilai dari observasi staf (level + hitungan bila ada). footTraffic = pejalan kaki saja; kendaraan masuk vehicleTraffic, jangan dihitung dua kali.
+   1. Lebih banyak kendaraan lewat = lebih terlihat dan lebih banyak calon pembeli yang mampir, TETAPI hanya jika kendaraan bisa berhenti: jika parkir "Tidak ada"/terbatas atau catatan menyebut jalan cepat/macet total/satu arah tanpa bahu jalan, skor vehicleTraffic TIDAK boleh tinggi dan sebut alasannya di factors.
+   2. Patokan kasar: Sepi 40–55, Sedang 55–70, Ramai 70–85, Sangat ramai 65–85 (turunkan bila sulit berhenti). Hitungan per jam boleh menggeser ± 10.
+   3. Jika level tidak diisi (data lama), estimasi dari jenis jalan/kota, tulis "estimasi" di factors, dan confidenceLevel maksimal "medium".
+   4. Lalu lintas adalah SALAH SATU faktor; demografi, kompetitor, foot traffic, akses, dan ekonomi tetap penentu utama. Jangan membuat recommendation hanya karena lalu lintas.`
+
 var parkingLabels = map[string]string{
 	constants.ParkingAvailable: "Memadai/luas",
 	constants.ParkingLimited:   "Terbatas",
@@ -142,12 +200,16 @@ func formatContext(siteCtx *model.SiteContext, competitors []*model.SiteCompetit
 	if siteCtx.PeakHours != "" {
 		lines = append(lines, fmt.Sprintf("- Jam sibuk: %s", siteCtx.PeakHours))
 	}
+	lines = append(lines, trafficLines(siteCtx)...)
 	if siteCtx.ParkingAvailability != nil && *siteCtx.ParkingAvailability != "" {
 		label := parkingLabels[*siteCtx.ParkingAvailability]
 		if label == "" {
 			label = *siteCtx.ParkingAvailability
 		}
 		lines = append(lines, fmt.Sprintf("- Ketersediaan parkir: %s", label))
+	}
+	if siteCtx.ParkingNote != nil && *siteCtx.ParkingNote != "" {
+		lines = append(lines, fmt.Sprintf("    • Catatan parkir: %s", *siteCtx.ParkingNote))
 	}
 	if siteCtx.PublicTransport != "" {
 		lines = append(lines, fmt.Sprintf("- Transportasi umum: %s", siteCtx.PublicTransport))
@@ -167,6 +229,9 @@ func formatContext(siteCtx *model.SiteContext, competitors []*model.SiteCompetit
 			}
 			lines = append(lines, fmt.Sprintf("    • %s — %s — %s", name, c.Distance, c.CompetitorType))
 		}
+	}
+	if note := competitorNoteOf(siteCtx); note != "" {
+		lines = append(lines, fmt.Sprintf(`- CATATAN KOMPETITOR DARI SITE STAFF (teks bebas, BELUM DIVERIFIKASI, lihat aturan G): "%s"`, note))
 	}
 	if len(notes) > 0 {
 		lines = append(lines, "- Catatan tambahan dari tim lapangan:")
@@ -199,6 +264,9 @@ func hasContext(siteCtx *model.SiteContext, competitors []*model.SiteCompetitor,
 		siteCtx.PublicTransport != "" ||
 		siteCtx.AnchorLandmark != "" ||
 		siteCtx.ObservedDemographics != "" ||
+		(siteCtx.VehicleTrafficLevel != nil && *siteCtx.VehicleTrafficLevel != "") ||
+		(siteCtx.ParkingNote != nil && *siteCtx.ParkingNote != "") ||
+		competitorNoteOf(siteCtx) != "" ||
 		len(competitors) > 0 ||
 		len(notes) > 0
 }
@@ -252,6 +320,11 @@ func buildPrompt(site *model.Site, siteCtx *model.SiteContext, competitors []*mo
 		contextBlock += "\n" + strings.TrimSuffix(measuredBlock(measured), "\n")
 		ctxRule += "\n\n" + measuredRule(measured)
 	}
+	// November scope (API-CHANGES §13.5, §6 note 19 Oct)
+	if competitorNoteOf(siteCtx) != "" {
+		ctxRule += "\n\n" + ruleG
+	}
+	ctxRule += "\n\n" + ruleH
 
 	return fmt.Sprintf(`Anda adalah analis senior site selection FamilyMart Indonesia. Tugas: hasilkan analisis kelayakan lokasi yang TEGAS, KONSISTEN, dan TIDAK KONTRADIKTIF.
 
@@ -288,7 +361,7 @@ A) GROUND TRUTH & VALIDASI KLAIM USER
    6. Jika tidak ada masalah, kembalikan "contextWarnings": [].
 
 B) INTERNAL CONSISTENCY (WAJIB)
-   1. overallScore = round(average dari 5 metrik). Tidak boleh menyimpang lebih dari 1 poin.
+   1. overallScore = %s. Tidak boleh menyimpang lebih dari 1 poin. (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)
    2. recommendation HARUS sesuai band overallScore: ≥82 "Strongly Recommended"; 70-81 "Recommended"; 55-69 "Proceed With Caution"; <55 "Reconsider".
    3. band setiap metrik HARUS sesuai score: ≥85 "high", 70-84 "good", 50-69 "moderate", <50 "low".
    4. narrative HARUS searah dengan recommendation. JANGAN campur "sangat menjanjikan" dengan "tidak layak" di paragraf yang sama.
@@ -311,7 +384,7 @@ OUTPUT:
 Kembalikan HANYA JSON sesuai schema. Jangan markdown fence, jangan komentar.`,
 		name, address, site.SiteCity, region, postalCode, district,
 		site.SiteLat, site.SiteLon, salesArea, yesNo(site.SiteOpen24Hours), yesNo(site.SiteSellingAlcohol), plannedOpening,
-		contextBlock, site.SiteCity, site.SiteName1, ctxRule,
+		contextBlock, overallScoreFormula, site.SiteCity, site.SiteName1, ctxRule,
 	)
 }
 

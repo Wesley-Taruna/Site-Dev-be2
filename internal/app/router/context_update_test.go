@@ -46,7 +46,7 @@ func TestSideBySide_UpdateContext(t *testing.T) {
 		oldDetailSQL[2],
 		`SELECT * FROM "Tasks" WHERE SiteID = 'ST1' ORDER BY "Tasks"."TaskID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT count(*) FROM "SiteContexts" WHERE SiteID = 'ST1'`,
-		`UPDATE "SiteContexts" SET "AnchorLandmark"='Pasar',"FootTrafficObservation"='ramai sore',"ObservedDemographics"='keluarga',"ParkingAvailability"=NULL,"PeakHours"='17-20',"PublicTransport"='KRL',"UpdatedAt"='<time>',"UpdatedBy"=1001 WHERE SiteID = 'ST1'`,
+		`UPDATE "SiteContexts" SET "AnchorLandmark"='Pasar',"CompetitorNote"=NULL,"FootTrafficObservation"='ramai sore',"ObservedDemographics"='keluarga',"ParkingAvailability"=NULL,"ParkingNote"=NULL,"PeakHours"='17-20',"PublicTransport"='KRL',"UpdatedAt"='<time>',"UpdatedBy"=1001,"VehicleTrafficCount"=NULL,"VehicleTrafficLevel"=NULL,"VehicleTrafficMinutes"=NULL,"VehicleTrafficNote"=NULL WHERE SiteID = 'ST1'`,
 		`DELETE FROM "SiteCompetitors" WHERE SiteID = 'ST1'`,
 		`INSERT INTO "SiteCompetitors" ("SiteID","CompetitorName","CompetitorType","Distance","CreatedAt") OUTPUT INSERTED."ID" VALUES ('ST1','Indomaret','minimarket','50m','<time>'),('ST1','Alfamart','','','<time>');`,
 		`DELETE FROM "SiteCustomNotes" WHERE SiteID = 'ST1'`,
@@ -65,7 +65,7 @@ func TestSideBySide_UpdateContext_FirstTime(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assert.Contains(t, string(body), `"parking_availability":"NONE","public_transport":"","anchor_landmark":"","observed_demographics":"","competitors":null,"custom_notes":null`)
-	assert.Contains(t, stableSQL(rec.sqls), `INSERT INTO "SiteContexts" ("SiteID","FootTrafficObservation","PeakHours","ParkingAvailability","PublicTransport","AnchorLandmark","ObservedDemographics","CreatedBy","UpdatedBy","CreatedAt","UpdatedAt") VALUES ('ST1','','','NONE','','','',1001,1001,'<time>','<time>');`)
+	assert.Contains(t, stableSQL(rec.sqls), `INSERT INTO "SiteContexts" ("SiteID","FootTrafficObservation","PeakHours","ParkingAvailability","PublicTransport","AnchorLandmark","ObservedDemographics","VehicleTrafficLevel","VehicleTrafficCount","VehicleTrafficMinutes","VehicleTrafficNote","ParkingNote","CompetitorNote","CreatedBy","UpdatedBy","CreatedAt","UpdatedAt") VALUES ('ST1','','','NONE','','','',NULL,NULL,NULL,NULL,NULL,NULL,1001,1001,'<time>','<time>');`)
 	assert.Contains(t, rec.sqls, `DELETE FROM "SiteCompetitors" WHERE SiteID = 'ST1'`, "lists are cleared even when none are sent")
 }
 

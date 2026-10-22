@@ -158,6 +158,12 @@ func siteContextRows(siteID string, req dto.SiteContextRequestUpsert, userID int
 		PublicTransport:        req.PublicTransport,
 		AnchorLandmark:         req.AnchorLandmark,
 		ObservedDemographics:   req.ObservedDemographics,
+		VehicleTrafficLevel:    nilIfEmpty(req.VehicleTrafficLevel),
+		VehicleTrafficCount:    req.VehicleTrafficCount,
+		VehicleTrafficMinutes:  req.VehicleTrafficMinutes,
+		VehicleTrafficNote:     nilIfEmpty(req.VehicleTrafficNote),
+		ParkingNote:            nilIfEmpty(req.ParkingNote),
+		CompetitorNote:         nilIfEmpty(req.CompetitorNote),
 		CreatedBy:              userID,
 		UpdatedBy:              userID,
 		CreatedAt:              now,
@@ -181,4 +187,21 @@ func siteContextRows(siteID string, req dto.SiteContextRequestUpsert, userID int
 		})
 	}
 	return
+}
+
+// nilIfEmpty is nil for "" (stored as NULL), else a pointer to the
+// trimmed-free value as sent.
+func nilIfEmpty(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// valueOf is *p, or "" for nil.
+func valueOf(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }

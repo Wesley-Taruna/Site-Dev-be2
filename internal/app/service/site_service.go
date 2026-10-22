@@ -43,6 +43,11 @@ type SiteService struct {
 	taskService             *TaskService
 	// duplicateCheck: other requests close by on submit (local §8)
 	duplicateCheck duplicateCheckConfig
+	// trafficRequiredOnSubmit: SUBMITED needs context.vehicle_traffic_level
+	// (November scope, API-CHANGES §13.5); config [survey]
+	// traffic_required_on_submit, default false so the current web app,
+	// which does not send it, can still submit
+	trafficRequiredOnSubmit bool
 }
 
 func NewSiteService() ISiteService {
@@ -57,6 +62,7 @@ func NewSiteService() ISiteService {
 		RepositoryTransaction:   repository.NewTransactionRepository(),
 		taskService:             newTaskService(),
 		duplicateCheck:          loadDuplicateCheckConfig(global.Setup.Common.Env),
+		trafficRequiredOnSubmit: global.Setup.Common.Env != nil && global.Setup.Common.Env.GetBool("survey.traffic_required_on_submit"),
 	}
 }
 

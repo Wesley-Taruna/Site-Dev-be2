@@ -151,7 +151,7 @@ func TestSideBySide_SaveNewSiteAndSubmit(t *testing.T) {
 		`DELETE FROM "SiteAttachments" WHERE SiteID = '` + siteID + `'`,
 		`INSERT INTO "SiteAttachments" ("SiteID","FileName","Path","CreatedAt") OUTPUT INSERTED."SiteAttachmentID" VALUES ('` + siteID + `','depan.jpg','bucket/temp/depan.jpg','<time>');`,
 		`SELECT count(*) FROM "SiteContexts" WHERE SiteID = '` + siteID + `'`,
-		`INSERT INTO "SiteContexts" ("SiteID","FootTrafficObservation","PeakHours","ParkingAvailability","PublicTransport","AnchorLandmark","ObservedDemographics","CreatedBy","UpdatedBy","CreatedAt","UpdatedAt") VALUES ('` + siteID + `','','17-20',NULL,'','','',1001,1001,'<time>','<time>');`,
+		`INSERT INTO "SiteContexts" ("SiteID","FootTrafficObservation","PeakHours","ParkingAvailability","PublicTransport","AnchorLandmark","ObservedDemographics","VehicleTrafficLevel","VehicleTrafficCount","VehicleTrafficMinutes","VehicleTrafficNote","ParkingNote","CompetitorNote","CreatedBy","UpdatedBy","CreatedAt","UpdatedAt") VALUES ('` + siteID + `','','17-20',NULL,'','','',NULL,NULL,NULL,NULL,NULL,NULL,1001,1001,'<time>','<time>');`,
 		`DELETE FROM "SiteCompetitors" WHERE SiteID = '` + siteID + `'`,
 		`INSERT INTO "SiteCompetitors" ("SiteID","CompetitorName","CompetitorType","Distance","CreatedAt") OUTPUT INSERTED."ID" VALUES ('` + siteID + `','Indomaret','','50m','<time>');`,
 		`DELETE FROM "SiteCustomNotes" WHERE SiteID = '` + siteID + `'`,

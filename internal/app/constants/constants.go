@@ -86,6 +86,26 @@ const (
 	ParkingNone      = "NONE"
 )
 
+// SiteContexts.VehicleTrafficLevel values (November scope, API-CHANGES
+// §13.5): Sepi, Sedang, Ramai, Sangat ramai.
+const (
+	VehicleTrafficQuiet    = "QUIET"
+	VehicleTrafficModerate = "MODERATE"
+	VehicleTrafficBusy     = "BUSY"
+	VehicleTrafficVeryBusy = "VERY_BUSY"
+)
+
+// Survey field limits (November scope, API-CHANGES §13.5 / §6 note), in
+// characters.
+const (
+	VehicleTrafficCountMax   = 99999
+	VehicleTrafficMinutesMin = 1
+	VehicleTrafficMinutesMax = 120
+	VehicleTrafficNoteMax    = 300
+	ParkingNoteMax           = 300
+	CompetitorNoteMax        = 500
+)
+
 // ID prefixes: Sites.SiteID = "ST" + YYYYMMDD + 6 digits, Tasks.TaskID =
 // "TS" + YYYYMMDD + 6 digits.
 const (
@@ -132,10 +152,23 @@ const (
 	MetricKeyCompetition   = "competition"
 	MetricKeyAccessibility = "accessibility"
 	MetricKeyEconomic      = "economic"
+	// MetricKeyVehicleTraffic "Lalu Lintas Kendaraan": the 6th metric
+	// (November scope, API-CHANGES §13.5), one more SiteAIMetrics row
+	MetricKeyVehicleTraffic = "vehicleTraffic"
 )
 
-// MetricKeyOrder is the order the 5 metrics are written in.
-var MetricKeyOrder = []string{MetricKeyFootTraffic, MetricKeyDemographics, MetricKeyCompetition, MetricKeyAccessibility, MetricKeyEconomic}
+// MetricKeyOrder is the order the metrics are written in (the 6th only
+// when the insight has it).
+var MetricKeyOrder = []string{MetricKeyFootTraffic, MetricKeyDemographics, MetricKeyCompetition, MetricKeyAccessibility, MetricKeyEconomic, MetricKeyVehicleTraffic}
+
+// Overall score weights with the 6th metric (November scope, API-CHANGES
+// §13.5): round(0.18 × the 5 old metrics + 0.10 × vehicleTraffic). DEFAULT
+// chosen by the agent, open for Wes (review §5 #14). They are written into
+// the Gemini prompt.
+const (
+	ScoreWeightMainMetric     = "0.18"
+	ScoreWeightVehicleTraffic = "0.10"
+)
 
 // TaskActionDuplicateConfirmed: the staff sent although other active
 // requests are close by (local §8); the note names them.

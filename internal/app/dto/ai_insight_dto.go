@@ -81,6 +81,9 @@ type AIInsightMetrics struct {
 	Competition   AIInsightMetric `json:"competition"`
 	Accessibility AIInsightMetric `json:"accessibility"`
 	Economic      AIInsightMetric `json:"economic"`
+	// VehicleTraffic "Lalu Lintas Kendaraan" (November scope, API-CHANGES
+	// §13.5); left out on insights made before
+	VehicleTraffic *AIInsightMetric `json:"vehicleTraffic,omitempty"`
 }
 
 type AIInsightCompetitor struct {
