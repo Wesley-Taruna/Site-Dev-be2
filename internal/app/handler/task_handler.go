@@ -235,12 +235,14 @@ func (h TaskHandler) Index(c echo.Context) (err error) {
 	}
 
 	req := dto.TaskRequestGet{
-		Page:    page.Page,
-		SiteID:  ctx.GetParamString("site_id"),
-		Status:  ctx.GetParamString("status"),
-		Search:  ctx.GetParamString("q"),
-		SortBy:  ctx.GetParamString("sort_by"),
-		SortDir: ctx.GetParamString("sort_dir"),
+		Page:   page.Page,
+		SiteID: ctx.GetParamString("site_id"),
+		Status: ctx.GetParamString("status"),
+		// November scope (open, review §5 #7): status_not=DRAFT
+		StatusNot: splitList(ctx.GetParamString("status_not")),
+		Search:    ctx.GetParamString("q"),
+		SortBy:    ctx.GetParamString("sort_by"),
+		SortDir:   ctx.GetParamString("sort_dir"),
 	}
 
 	var tasks []dto.TaskResponseGet

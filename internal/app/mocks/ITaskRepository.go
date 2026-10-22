@@ -92,6 +92,36 @@ func (_m *ITaskRepository) GetByStatuses(ctx context.Context, offset int, limit 
 	return r0, ret.Get(1).(int64), ret.Error(2)
 }
 
+// GetNotInStatuses provides a mock function with given fields: ctx, offset, limit, orderBy, excluded, siteIDs, createdBy
+func (_m *ITaskRepository) GetNotInStatuses(ctx context.Context, offset int, limit int, orderBy string, excluded []string, siteIDs []string, createdBy int64) ([]*model.Task, int64, error) {
+	ret := _m.Called(ctx, offset, limit, orderBy, excluded, siteIDs, createdBy)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int, int, string, []string, []string, int64) ([]*model.Task, int64, error)); ok {
+		return rf(ctx, offset, limit, orderBy, excluded, siteIDs, createdBy)
+	}
+
+	var r0 []*model.Task
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.Task)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
+// GetStatusesBySiteIDs provides a mock function with given fields: ctx, siteIDs
+func (_m *ITaskRepository) GetStatusesBySiteIDs(ctx context.Context, siteIDs []string) ([]*model.Task, error) {
+	ret := _m.Called(ctx, siteIDs)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string) ([]*model.Task, error)); ok {
+		return rf(ctx, siteIDs)
+	}
+
+	var r0 []*model.Task
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.Task)
+	}
+	return r0, ret.Error(1)
+}
+
 // CountByStatus provides a mock function with given fields: ctx, createdBy
 func (_m *ITaskRepository) CountByStatus(ctx context.Context, createdBy int64) ([]model.TaskStatusCount, error) {
 	ret := _m.Called(ctx, createdBy)

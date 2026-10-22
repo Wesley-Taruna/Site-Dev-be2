@@ -149,16 +149,40 @@ func (s *SiteService) GetMaps(ctx context.Context) (res dto.SiteMapListResponseG
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
 		return
 	}
+	var requested []*model.Site
 	for _, site := range sites {
-		if _, ok := matched[normalizeStoreName(site.SiteName1)]; ok {
-			continue
+		if _, ok := matched[normalizeStoreName(site.SiteName1)]; !ok {
+			requested = append(requested, site)
 		}
+	}
+
+	// task status of the request pins (November scope, API-CHANGES §4):
+	// one query for all
+	requestedIDs := make([]string, 0, len(requested))
+	for _, site := range requested {
+		requestedIDs = append(requestedIDs, site.SiteID)
+	}
+	var tasks []*model.Task
+	if len(requestedIDs) > 0 {
+		if tasks, err = s.RepositoryTask.GetStatusesBySiteIDs(ctx, requestedIDs); err != nil {
+			span.RecordError(err)
+			s.opt.Logger.AddMessage(log.ErrorLevel, err)
+			return
+		}
+	}
+	statusBySite := make(map[string]string, len(tasks))
+	for _, t := range tasks {
+		statusBySite[t.SiteID] = t.TaskStatus
+	}
+
+	for _, site := range requested {
 		points = append(points, dto.SiteMapResponseGet{
 			StoreName:     site.SiteName1,
 			StoreTypeName: "Requested",
 			SiteType:      "Site Requested",
 			Longitude:     site.SiteLon,
 			Latitude:      site.SiteLat,
+			TaskStatus:    statusBySite[site.SiteID],
 		})
 	}
 

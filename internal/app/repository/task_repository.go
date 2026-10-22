@@ -7,6 +7,7 @@ import (
 	"site-dev-backend/internal/app/model"
 
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
+	"gorm.io/gorm"
 )
 
 type ITaskRepository interface {
@@ -21,6 +22,12 @@ type ITaskRepository interface {
 	// GetByStatuses lists tasks whose status is one of statuses (siteIDs
 	// nil = no site filter, createdBy 0 = everyone's), with the total count.
 	GetByStatuses(ctx context.Context, offset int, limit int, orderBy string, statuses []string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error)
+	// GetNotInStatuses is GetByStatuses for every status except the given
+	// ones (November scope: "all except drafts").
+	GetNotInStatuses(ctx context.Context, offset int, limit int, orderBy string, excluded []string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error)
+	// GetStatusesBySiteIDs loads SiteID + TaskStatus of the sites' tasks
+	// (map pins, November scope).
+	GetStatusesBySiteIDs(ctx context.Context, siteIDs []string) (tasks []*model.Task, err error)
 	// CountByStatus counts tasks per TaskStatus (createdBy 0 = all tasks).
 	CountByStatus(ctx context.Context, createdBy int64) (counts []model.TaskStatusCount, err error)
 	Create(ctx context.Context, task *model.Task) (err error)
@@ -136,7 +143,42 @@ func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit in
 	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetByStatuses")
 	defer span.End()
 
-	db := readDB(ctx, r.opt).Where("TaskStatus IN (?)", statuses)
+	tasks, count, err = r.pageWhere(readDB(ctx, r.opt).Where("TaskStatus IN (?)", statuses), offset, limit, orderBy, siteIDs, createdBy)
+	if err != nil {
+		span.RecordError(err)
+	}
+	return
+}
+
+func (r *TaskRepository) GetNotInStatuses(ctx context.Context, offset int, limit int, orderBy string, excluded []string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetNotInStatuses")
+	defer span.End()
+
+	tasks, count, err = r.pageWhere(readDB(ctx, r.opt).Where("TaskStatus NOT IN (?)", excluded), offset, limit, orderBy, siteIDs, createdBy)
+	if err != nil {
+		span.RecordError(err)
+	}
+	return
+}
+
+func (r *TaskRepository) GetStatusesBySiteIDs(ctx context.Context, siteIDs []string) (tasks []*model.Task, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetStatusesBySiteIDs")
+	defer span.End()
+
+	if len(siteIDs) == 0 {
+		return
+	}
+	if err = readDB(ctx, r.opt).Select("SiteID, TaskStatus").Where("SiteID IN (?)", siteIDs).Find(&tasks).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+// pageWhere adds the site/creator filters to db, counts, then loads one
+// page.
+func (r *TaskRepository) pageWhere(db *gorm.DB, offset int, limit int, orderBy string, siteIDs []string, createdBy int64) (tasks []*model.Task, count int64, err error) {
 
 	if siteIDs != nil {
 		db = db.Where("SiteID IN (?)", siteIDs)
@@ -146,7 +188,6 @@ func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit in
 	}
 
 	if err = db.Model(new(model.Task)).Count(&count).Error; err != nil {
-		span.RecordError(err)
 		return
 	}
 
@@ -161,7 +202,6 @@ func (r *TaskRepository) GetByStatuses(ctx context.Context, offset int, limit in
 	}
 
 	if err = db.Find(&tasks).Error; err != nil {
-		span.RecordError(err)
 		return
 	}
 

@@ -103,11 +103,14 @@ func TestSideBySide_SiteMaps(t *testing.T) {
 	}), body)
 	// site-dev-api also ran `SELECT count(*) FROM "Sites"` (generic FindAll)
 	// and ignored the number; not repeated.
-	require.Len(t, rec.sqls, 2)
+	// November scope (API-CHANGES §4): one more query for the request
+	// pins' task_status (no row here, so the answer is the old one)
+	require.Len(t, rec.sqls, 3)
 	assert.Equal(t, squash(`SELECT ms.StoreName, mt.StoreTypeName, 'Site Active' as SiteType, ms.Longitude, ms.Latitude
 		FROM AMFIBI_MASTER.dbo.MStore as ms INNER JOIN AMFIBI_MASTER.dbo.MStoreType mt on ms.StoreType = mt.StoreTypeID
 		WHERE ms.Longitude != 0 and ms.IsActive = 1 and ms.StoreName != 'FOODTRUCK 1'`), squash(rec.sqls[0]))
 	assert.Equal(t, `SELECT * FROM "Sites"`, rec.sqls[1])
+	assert.Equal(t, `SELECT SiteID, TaskStatus FROM "Tasks" WHERE SiteID IN ('ST2')`, rec.sqls[2])
 }
 
 func TestSideBySide_SiteActiveList(t *testing.T) {

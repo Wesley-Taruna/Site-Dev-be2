@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	dto "site-dev-backend/internal/app/dto"
 
 	"gitlab.com/fami-app-v2/familib/familabs"
@@ -28,4 +30,15 @@ func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.
 func userIDFromContext(ctx *familabs.Context) int64 {
 	userID, _ := ctx.Request().Context().Value(constants.KeyUserID).(int64)
 	return userID
+}
+
+// splitList reads "A,B" into [A B] (blanks dropped; "" = nil).
+func splitList(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

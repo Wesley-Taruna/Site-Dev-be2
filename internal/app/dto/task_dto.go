@@ -6,12 +6,17 @@ import "time"
 // familabs paginator; the page size is fixed at TaskPageSize (same as
 // site-dev-api, which ignores per_page/limit for this list).
 type TaskRequestGet struct {
-	Page    int
-	SiteID  string
-	Status  string
-	Search  string
-	SortBy  string
-	SortDir string
+	Page   int
+	SiteID string
+	Status string
+	// StatusNot (November scope, review §5 #7, OPEN): statuses to leave
+	// out, comma-separated (e.g. "DRAFT" = "all except drafts" for the
+	// approvers' Semua tab). Used only when Status is empty; empty = no
+	// filter, so today's calls answer as before.
+	StatusNot []string
+	Search    string
+	SortBy    string
+	SortDir   string
 }
 
 // ListPageSize is the fixed number of rows per page of every site-dev list

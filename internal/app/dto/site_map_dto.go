@@ -10,6 +10,9 @@ type SiteMapResponseGet struct {
 	Longitude      float64 `json:"longitude"`
 	Latitude       float64 `json:"latitude"`
 	OpeningStoreDT *string `json:"opening_store_dt"`
+	// TaskStatus is the stored task status of a "Site Requested" point
+	// (November scope, API-CHANGES §4 / review #6); left out for stores.
+	TaskStatus string `json:"task_status,omitempty"`
 }
 
 // SiteMapStoreTypeCount is the number of map points per store type

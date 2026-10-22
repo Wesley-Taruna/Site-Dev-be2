@@ -130,6 +130,9 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 	if req.Status == constants.TaskStatusHoldGroup {
 		// status=HOLD = both HOLD_* (November scope, API-CHANGES §13.3)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.HoldStatuses, siteIDs, createdBy)
+	} else if req.Status == "" && len(req.StatusNot) > 0 {
+		// status_not (November scope, open: review §5 #7)
+		tasks, total, err = s.RepositoryTask.GetNotInStatuses(ctx, offset, dto.TaskPageSize, orderBy, req.StatusNot, siteIDs, createdBy)
 	} else {
 		tasks, total, err = s.RepositoryTask.Get(ctx, offset, dto.TaskPageSize, orderBy, siteIDs, req.Status, createdBy)
 	}
