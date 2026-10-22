@@ -122,6 +122,21 @@ func (_m *ITaskRepository) GetStatusesBySiteIDs(ctx context.Context, siteIDs []s
 	return r0, ret.Error(1)
 }
 
+// GetPortal provides a mock function with given fields: ctx, statuses, search, offset, limit
+func (_m *ITaskRepository) GetPortal(ctx context.Context, statuses []string, search string, offset int, limit int) ([]*model.Task, int64, error) {
+	ret := _m.Called(ctx, statuses, search, offset, limit)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string, string, int, int) ([]*model.Task, int64, error)); ok {
+		return rf(ctx, statuses, search, offset, limit)
+	}
+
+	var r0 []*model.Task
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.Task)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
 // CountByStatus provides a mock function with given fields: ctx, createdBy
 func (_m *ITaskRepository) CountByStatus(ctx context.Context, createdBy int64) ([]model.TaskStatusCount, error) {
 	ret := _m.Called(ctx, createdBy)

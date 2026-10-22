@@ -54,6 +54,11 @@ type IApprovalRepository interface {
 	// after since in rounds where this approver approved a lower level:
 	// approver news DIV_HEAD_RETURNED.
 	GetDivHeadReturnsAfterApproval(ctx context.Context, approverID int64, since time.Time) (rows []model.ApproverNewsRow, err error)
+	// GetFirstSubmittedAt is each task's first submit time (portal).
+	GetFirstSubmittedAt(ctx context.Context, taskIDs []string) (rows []model.TaskSubmittedAt, err error)
+	// GetLevelNotesByTaskIDs is the notes of the levels in status, by task
+	// (portal hold_note).
+	GetLevelNotesByTaskIDs(ctx context.Context, taskIDs []string, status string) (rows []model.TaskLevelNote, err error)
 }
 
 type ApprovalRepository struct {
@@ -363,6 +368,46 @@ func (r *ApprovalRepository) GetDivHeadReturnsAfterApproval(ctx context.Context,
 		Select("ApprovalHDR.TaskID, Tasks.SiteID, ApprovalDET.ActedAt AS At").
 		Where("ApprovalDET.Status = ? AND ApprovalDET.ApproverRoleID = ? AND ApprovalDET.ActedAt > ?", constants.ApprovalDetailStatusRevision, constants.RoleDivHead, since).
 		Where("EXISTS (?)", approvedBelow).
+		Find(&rows).Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetFirstSubmittedAt(ctx context.Context, taskIDs []string) (rows []model.TaskSubmittedAt, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetFirstSubmittedAt")
+	defer span.End()
+
+	if len(taskIDs) == 0 {
+		return
+	}
+	err = readDB(ctx, r.opt).Table("ApprovalHDR").
+		Select("TaskID, MIN(SubmittedAt) AS SubmittedAt").
+		Where("TaskID IN ?", taskIDs).
+		Group("TaskID").
+		Find(&rows).Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetLevelNotesByTaskIDs(ctx context.Context, taskIDs []string, status string) (rows []model.TaskLevelNote, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetLevelNotesByTaskIDs")
+	defer span.End()
+
+	if len(taskIDs) == 0 {
+		return
+	}
+	err = readDB(ctx, r.opt).Table("ApprovalDET").
+		Select("ApprovalHDR.TaskID, ApprovalDET.Notes").
+		Joins("JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID").
+		Where("ApprovalHDR.TaskID IN ? AND ApprovalDET.Status = ?", taskIDs, status).
 		Find(&rows).Error
 	if err != nil {
 		span.RecordError(err)

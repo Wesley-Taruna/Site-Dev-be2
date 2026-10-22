@@ -28,6 +28,9 @@ type ITaskRepository interface {
 	// GetStatusesBySiteIDs loads SiteID + TaskStatus of the sites' tasks
 	// (map pins, November scope).
 	GetStatusesBySiteIDs(ctx context.Context, siteIDs []string) (tasks []*model.Task, err error)
+	// GetPortal lists, newest change first, the tasks in statuses whose
+	// site name or ID contains search (web portal, November scope).
+	GetPortal(ctx context.Context, statuses []string, search string, offset int, limit int) (tasks []*model.Task, count int64, err error)
 	// CountByStatus counts tasks per TaskStatus (createdBy 0 = all tasks).
 	CountByStatus(ctx context.Context, createdBy int64) (counts []model.TaskStatusCount, err error)
 	Create(ctx context.Context, task *model.Task) (err error)
@@ -272,6 +275,37 @@ func (r *TaskRepository) GetActiveRequestPoints(ctx context.Context, minLat floa
 		Where("(Tasks.TaskStatus LIKE 'WAITING[_]%' OR Tasks.TaskStatus IN ?)", extraStatuses).
 		Scan(&points).Error
 	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *TaskRepository) GetPortal(ctx context.Context, statuses []string, search string, offset int, limit int) (tasks []*model.Task, count int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.GetPortal")
+	defer span.End()
+
+	db := readDB(ctx, r.opt).Table("Tasks").
+		Joins("JOIN Sites ON Sites.SiteID = Tasks.SiteID").
+		Where("Tasks.TaskStatus IN ?", statuses)
+	if search != "" {
+		db = db.Where("(Sites.SiteName1 LIKE ? OR Sites.SiteID LIKE ?)", "%"+search+"%", "%"+search+"%")
+	}
+
+	if err = db.Session(&gorm.Session{}).Count(&count).Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	db = db.Select("Tasks.*").Order("Tasks.UpdatedAt DESC, Tasks.TaskID DESC")
+	if limit > 0 {
+		db = db.Limit(limit)
+	}
+	if offset > 0 {
+		db = db.Offset(offset)
+	}
+	if err = db.Find(&tasks).Error; err != nil {
 		span.RecordError(err)
 		return
 	}

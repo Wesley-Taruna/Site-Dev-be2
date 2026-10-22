@@ -25,4 +25,5 @@ func init() {
 	// November scope
 	handlers["activity"] = &handler.ActivityHandler{}
 	handlers["competitor-brands"] = &handler.CompetitorBrandHandler{}
+	handlers["portal/site"] = &handler.PortalHandler{}
 }

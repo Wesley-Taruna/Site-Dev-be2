@@ -261,6 +261,36 @@ func (_m *IApprovalRepository) GetDivHeadReturnsAfterApproval(ctx context.Contex
 	return r0, ret.Error(1)
 }
 
+// GetFirstSubmittedAt provides a mock function with given fields: ctx, taskIDs
+func (_m *IApprovalRepository) GetFirstSubmittedAt(ctx context.Context, taskIDs []string) ([]model.TaskSubmittedAt, error) {
+	ret := _m.Called(ctx, taskIDs)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string) ([]model.TaskSubmittedAt, error)); ok {
+		return rf(ctx, taskIDs)
+	}
+
+	var r0 []model.TaskSubmittedAt
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.TaskSubmittedAt)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetLevelNotesByTaskIDs provides a mock function with given fields: ctx, taskIDs, status
+func (_m *IApprovalRepository) GetLevelNotesByTaskIDs(ctx context.Context, taskIDs []string, status string) ([]model.TaskLevelNote, error) {
+	ret := _m.Called(ctx, taskIDs, status)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string, string) ([]model.TaskLevelNote, error)); ok {
+		return rf(ctx, taskIDs, status)
+	}
+
+	var r0 []model.TaskLevelNote
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.TaskLevelNote)
+	}
+	return r0, ret.Error(1)
+}
+
 // NewIApprovalRepository creates a new instance of IApprovalRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewIApprovalRepository(t interface {
 	mock.TestingT
