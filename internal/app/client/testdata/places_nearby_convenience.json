@@ -1,0 +1,73 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_indo_1",
+   "displayName": {
+    "text": "Indomaret Dago Atas",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.885,
+    "longitude": 107.6131
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_toko_1",
+   "displayName": {
+    "text": "Toko Sumber Rejeki",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8858,
+    "longitude": 107.6138
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_711_1",
+   "displayName": {
+    "text": "7-Eleven Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8875,
+    "longitude": 107.6112
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_atm_bca",
+   "displayName": {
+    "text": "ATM BCA Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8857,
+    "longitude": 107.6127
+   },
+   "types": [
+    "atm",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "atm"
+  }
+ ]
+}

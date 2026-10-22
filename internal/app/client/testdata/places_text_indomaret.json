@@ -1,0 +1,125 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_indo_1",
+   "displayName": {
+    "text": "Indomaret Dago Atas",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.885,
+    "longitude": 107.6131
+   },
+   "types": [
+    "convenience_store",
+    "grocery_store",
+    "food_store",
+    "store"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_indo_atm",
+   "displayName": {
+    "text": "ATM Indomaret Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8855,
+    "longitude": 107.6131
+   },
+   "types": [
+    "atm",
+    "finance"
+   ],
+   "primaryType": "atm"
+  },
+  {
+   "id": "TEST_indo_2",
+   "displayName": {
+    "text": "Indomart Simpang",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.888,
+    "longitude": 107.6135
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_indo_dc",
+   "displayName": {
+    "text": "Gudang Indomaret Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.889,
+    "longitude": 107.613
+   },
+   "types": [
+    "warehouse_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "warehouse_store"
+  },
+  {
+   "id": "TEST_fm",
+   "displayName": {
+    "text": "FamilyMart Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8862,
+    "longitude": 107.613
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_alfa_x",
+   "displayName": {
+    "text": "Alfamart Simpang Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8866,
+    "longitude": 107.6126
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_indo_far",
+   "displayName": {
+    "text": "Indomaret Jauh",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.896,
+    "longitude": 107.613
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  }
+ ],
+ "nextPageToken": "TEST_next_page"
+}

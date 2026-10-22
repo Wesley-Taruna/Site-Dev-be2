@@ -1,0 +1,345 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_fm_office",
+   "displayName": {
+    "text": "FamilyMart Head Office",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8861,
+    "longitude": 107.6132
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_1",
+   "displayName": {
+    "text": "Kantor Uji 1",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8858,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_2",
+   "displayName": {
+    "text": "Kantor Uji 2",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8856,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_3",
+   "displayName": {
+    "text": "Kantor Uji 3",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8854,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_4",
+   "displayName": {
+    "text": "Kantor Uji 4",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8852,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_5",
+   "displayName": {
+    "text": "Kantor Uji 5",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.885,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_6",
+   "displayName": {
+    "text": "Kantor Uji 6",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8848,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_7",
+   "displayName": {
+    "text": "Kantor Uji 7",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8846,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_8",
+   "displayName": {
+    "text": "Kantor Uji 8",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8844,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_9",
+   "displayName": {
+    "text": "Kantor Uji 9",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8842,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_10",
+   "displayName": {
+    "text": "Kantor Uji 10",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.884,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_11",
+   "displayName": {
+    "text": "Kantor Uji 11",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8838,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_12",
+   "displayName": {
+    "text": "Kantor Uji 12",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8836,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_13",
+   "displayName": {
+    "text": "Kantor Uji 13",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8834,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_14",
+   "displayName": {
+    "text": "Kantor Uji 14",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8832,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_15",
+   "displayName": {
+    "text": "Kantor Uji 15",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.883,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_16",
+   "displayName": {
+    "text": "Kantor Uji 16",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8828000000000005,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_17",
+   "displayName": {
+    "text": "Kantor Uji 17",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8826,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_18",
+   "displayName": {
+    "text": "Kantor Uji 18",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8824000000000005,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  },
+  {
+   "id": "TEST_office_19",
+   "displayName": {
+    "text": "Kantor Uji 19",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8822,
+    "longitude": 107.613
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  }
+ ]
+}

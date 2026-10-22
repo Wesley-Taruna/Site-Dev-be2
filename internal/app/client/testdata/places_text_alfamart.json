@@ -1,0 +1,56 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_alfa_1",
+   "displayName": {
+    "text": "Alfamart Dipatiukur",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8845,
+    "longitude": 107.6145
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_alfa_2",
+   "displayName": {
+    "text": "Alfa Expres Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.887,
+    "longitude": 107.612
+   },
+   "types": [
+    "convenience_store",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "convenience_store"
+  },
+  {
+   "id": "TEST_midi_1",
+   "displayName": {
+    "text": "Alfamidi Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8835,
+    "longitude": 107.6125
+   },
+   "types": [
+    "supermarket",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "supermarket"
+  }
+ ]
+}
