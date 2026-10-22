@@ -19,6 +19,8 @@ import (
 // IGeocodingClient is the Google Geocoding API (point -> address, typed
 // address -> points), ported from site-dev-api (standard library only).
 type IGeocodingClient interface {
+	// Configured: a key is set (geocoding.apikey).
+	Configured() bool
 	Reverse(ctx context.Context, lat float64, lng float64) (res dto.ReverseGeocodeResponse, err error)
 	Search(ctx context.Context, query string) (res []dto.AddressSearchResult, err error)
 }
@@ -121,6 +123,8 @@ func mapAddressComponents(components []googleGeocodeAddressComponent) dto.Revers
 		PostalCode: postal,
 	}
 }
+
+func (g *GeocodingClient) Configured() bool { return g.apiKey != "" }
 
 // call sends one Geocoding request; ZERO_RESULTS is an empty answer, not an
 // error.

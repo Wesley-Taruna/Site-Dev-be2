@@ -100,12 +100,15 @@ func (s *GeocodingService) Search(ctx context.Context, query string, actorID int
 }
 
 // useQuota checks the switch, then counts one Google call server-wide
-// (daily_cap) and for the user; switched off = 503, cap reached = 429
+// (daily_cap) and for the user; switched off or no key = 503, cap reached = 429
 // "Batas harian ...", user quota used up = 429 "Kuota reverse-geocode
 // harian (<limit>) sudah habis, coba lagi besok."
 func (s *GeocodingService) useQuota(ctx context.Context, actorID int64) error {
 	if !s.cfg.enabled {
 		return echo.NewHTTPError(http.StatusServiceUnavailable, "Alamat otomatis (Google Geocoding) belum diaktifkan di server ini ([geocoding] enabled = false).")
+	}
+	if !s.ClientGeocoding.Configured() {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "Kunci Google Geocoding belum diisi di server ini (geocoding.apikey).")
 	}
 	if err := s.RepositoryGoogleBudget.Take(ctx, constants.QuotaGeocoding, s.cfg.dailyCap); err != nil {
 		if errors.Is(err, repository.ErrGoogleDailyCap) {

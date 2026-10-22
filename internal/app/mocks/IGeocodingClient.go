@@ -17,6 +17,20 @@ type IGeocodingClient struct {
 	mock.Mock
 }
 
+// Configured provides a mock function with given fields:
+func (_m *IGeocodingClient) Configured() bool {
+	ret := _m.Called()
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func() bool); ok {
+		r0 = rf()
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(bool)
+	}
+
+	return r0
+}
+
 // Reverse provides a mock function with given fields: ctx, lat, lng
 func (_m *IGeocodingClient) Reverse(ctx context.Context, lat float64, lng float64) (dto.ReverseGeocodeResponse, error) {
 	ret := _m.Called(ctx, lat, lng)

@@ -39,6 +39,7 @@ func withGeocoding(t *testing.T) *mocks.IGeocodingClient {
 	testEnv.Set("geocoding.enabled", true) // off by default since 22 Oct
 	t.Cleanup(func() { testEnv.Set("geocoding.enabled", false) })
 	geo := mocks.NewIGeocodingClient(t)
+	geo.On("Configured").Return(true).Maybe()
 	withClients(t, func(c *client.Clients) { c.Geocoding = geo })
 	return geo
 }

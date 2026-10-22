@@ -30,9 +30,20 @@ func TestGeocoding_OffIs503WithoutQuotaOrCall(t *testing.T) {
 	assert.Equal(t, http.StatusServiceUnavailable, httpCode(t, err))
 }
 
+func TestGeocoding_NoKeyIs503WithoutQuota(t *testing.T) {
+	s, _, _, c := newTestGeocoding(t, true)
+	c.On("Configured").Return(false)
+
+	_, err := s.Reverse(context.Background(), -6.26, 106.81, 7)
+
+	assert.Equal(t, http.StatusServiceUnavailable, httpCode(t, err))
+	assert.Contains(t, err.Error(), "Kunci Google Geocoding belum diisi")
+}
+
 func TestGeocoding_ServerCapThenUserQuotaThenGoogle(t *testing.T) {
 	s, q, b, c := newTestGeocoding(t, true)
 	assert.Equal(t, int64(150), s.cfg.dailyCap)
+	c.On("Configured").Return(true)
 
 	b.On("Take", ctxAny, constants.QuotaGeocoding, int64(150)).Return(repository.ErrGoogleDailyCap).Once()
 	_, err := s.Reverse(context.Background(), -6.26, 106.81, 7)
