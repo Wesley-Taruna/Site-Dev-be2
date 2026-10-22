@@ -127,7 +127,8 @@ func (s *ActivityService) get(ctx context.Context, req dto.ActivityRequestGet, u
 		return
 	}
 
-	return s.rows(ctx, histories, userID, since)
+	res, err = s.rows(ctx, histories, userID, since)
+	return
 }
 
 // pageSlice is one page of rows.
@@ -144,7 +145,7 @@ func pageSlice[T any](rows []T, offset int, limit int) []T {
 
 // rows adds task status, site name, actor name and role (one query for the
 // tasks, one for the sites, one per actor).
-func (s *ActivityService) rows(ctx context.Context, histories []*model.TaskHistory, userID int64, since time.Time) (res []dto.ActivityResponseGet, total int64, err error) {
+func (s *ActivityService) rows(ctx context.Context, histories []*model.TaskHistory, userID int64, since time.Time) (res []dto.ActivityResponseGet, err error) {
 	taskIDs := make([]string, 0, len(histories))
 	for _, h := range histories {
 		taskIDs = append(taskIDs, h.TaskID)
