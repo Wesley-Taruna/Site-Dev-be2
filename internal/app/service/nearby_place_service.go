@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,9 +29,11 @@ import (
 // otherwise (or when Google refuses or the daily cap is near) OpenStreetMap;
 // the answer always names source and radius. Cost guards: one fetch per
 // ~110 m cell, cached 7 days (OSM fallbacks 6 h); a server-wide daily cap on
-// Google calls (150; a new area needs 10); after a refused key Google is
-// skipped for 1 hour. Off by default ([places] enabled = false: 503, and the
-// AI prompt stays as before).
+// Google calls (150; a new area needs client CallsPerArea, 7 with the
+// default categories); after a refused key Google is skipped for 1 hour.
+// Only the categories in places.categories are searched and answered
+// (default competitor + office, API Lab demo view). Off by default
+// ([places] enabled = false: 503, and the AI prompt stays as before).
 type INearbyPlaceService interface {
 	// GetArea is GET /v1/site/nearby-places.
 	GetArea(ctx context.Context, req dto.NearbyPlacesRequestGet) (res dto.NearbyAreaResponseGet, err error)
@@ -45,6 +48,7 @@ type INearbyPlaceService interface {
 type nearbyConfig struct {
 	enabled          bool
 	aiMeasured       bool
+	categories       []string
 	dailyCap         int64
 	defaultRadiusM   int
 	maxRadiusM       int
@@ -63,6 +67,7 @@ func loadNearbyConfig(env env.Provider) nearbyConfig {
 		fallbackCacheTTL: 6 * time.Hour,
 		aiTimeout:        30 * time.Second,
 	}
+	c.categories = client.NearbyCategoriesFrom(env)
 	if env == nil {
 		return c
 	}
@@ -95,8 +100,9 @@ const (
 	// nearbyPadM: the cache key rounds the point to ~110 m, so fetch a bit
 	// wider and filter from the exact point
 	nearbyPadM = 120
-	// nearbyCacheVersion: change when the classification changes
-	nearbyCacheVersion = "v1"
+	// nearbyCacheVersion: change when the classification changes (v2, 22
+	// Oct: real Google/OSM clients, API Lab brand variants + ATM rule)
+	nearbyCacheVersion = "v2"
 	// googleOffFor: after Google refuses the key, skip it this long
 	googleOffFor = time.Hour
 	// storePointsTTL: how long the store list is kept in memory
@@ -183,14 +189,14 @@ func (s *NearbyPlaceService) area(ctx context.Context, lat float64, lng float64,
 
 	cLat := math.Round(lat*1000) / 1000
 	cLng := math.Round(lng*1000) / 1000
-	key := fmt.Sprintf("%s:%.3f,%.3f:%d", nearbyCacheVersion, cLat, cLng, radiusM)
+	key := fmt.Sprintf("%s:%s:%.3f,%.3f:%d", nearbyCacheVersion, strings.Join(s.cfg.categories, "+"), cLat, cLng, radiusM)
 
 	st, cached, err := s.loadArea(ctx, key, cLat, cLng, radiusM+nearbyPadM)
 	if err != nil {
 		return
 	}
 
-	places, categories := areaForPoint(st, lat, lng, radiusM)
+	places, categories := areaForPoint(st, lat, lng, radiusM, s.cfg.categories)
 	res = dto.NearbyAreaResponseGet{
 		Source:         st.Source,
 		Lat:            lat,
@@ -282,7 +288,7 @@ func (s *NearbyPlaceService) googleUsable(ctx context.Context) (bool, string) {
 	if !off.IsZero() && s.now().Before(off.Add(googleOffFor)) {
 		return false, reason
 	}
-	if s.RepositoryNearbyArea.GoogleCallsLeft(ctx, s.cfg.dailyCap) < client.GooglePlacesCallsPerArea {
+	if s.RepositoryNearbyArea.GoogleCallsLeft(ctx, s.cfg.dailyCap) < int64(s.ClientPlaces.CallsPerArea()) {
 		return false, "Batas harian panggilan Google hampir habis"
 	}
 	return true, ""
@@ -337,9 +343,18 @@ func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64
 		return nil, echo.NewHTTPError(http.StatusBadGateway, "Data peta (OpenStreetMap) tidak bisa diambil sekarang. Coba lagi sebentar lagi.")
 	}
 	st.Source = constants.NearbySourceOSM
-	st.Places = places
+	st.Places = make([]dto.NearbyPlaceItem, 0, len(places))
+	on := map[string]bool{}
+	for _, c := range s.cfg.categories {
+		on[c] = true
+	}
+	for _, p := range places {
+		if on[p.Category] {
+			st.Places = append(st.Places, p)
+		}
+	}
 	st.Categories = map[string]dto.NearbyCategoryInfo{}
-	for _, c := range constants.NearbyCategories {
+	for _, c := range s.cfg.categories {
 		st.Categories[c] = dto.NearbyCategoryInfo{Source: constants.NearbySourceOSM}
 	}
 	st.FallbackReason = reason

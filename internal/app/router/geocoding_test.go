@@ -36,6 +36,8 @@ type oldAddressSearchResult struct {
 }
 
 func withGeocoding(t *testing.T) *mocks.IGeocodingClient {
+	testEnv.Set("geocoding.enabled", true) // off by default since 22 Oct
+	t.Cleanup(func() { testEnv.Set("geocoding.enabled", false) })
 	geo := mocks.NewIGeocodingClient(t)
 	withClients(t, func(c *client.Clients) { c.Geocoding = geo })
 	return geo
@@ -80,4 +82,13 @@ func TestSideBySide_GeocodingSearch(t *testing.T) {
 
 	code, _ = call(t, h, http.MethodGet, "/v1/geocoding/search?q=ke", nil, 1001)
 	assert.Equal(t, http.StatusUnprocessableEntity, code)
+}
+
+func TestGeocoding_OffByDefault(t *testing.T) {
+	h, _, _ := stack(t)
+
+	code, body := call(t, h, http.MethodGet, "/v1/geocoding/reverse?lat=-6.26&lng=106.81", nil, 1001)
+
+	assert.Equal(t, http.StatusServiceUnavailable, code)
+	assertSameJSON(t, []byte(`{"code":503,"status":"failure","message":"Service Unavailable","errors":{"error":"Alamat otomatis (Google Geocoding) belum diaktifkan di server ini ([geocoding] enabled = false)."}}`), body)
 }

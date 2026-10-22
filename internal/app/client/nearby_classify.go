@@ -25,10 +25,13 @@ type competitorBrand struct {
 }
 
 // competitorBrands: order = match order (Alfamidi before Alfamart).
+// Patterns = API Lab src/lib/brands.ts (5289ab2, 22 Oct): spelling
+// variants seen in Google / OSM names ("Indomart", "Indo Maret",
+// "Alfa Expres").
 var competitorBrands = []competitorBrand{
-	{"Indomaret", regexp.MustCompile(`(?i)indomaret`)},
+	{"Indomaret", regexp.MustCompile(`(?i)indo\s*-?\s*mare?t`)},
 	{"Alfamidi", regexp.MustCompile(`(?i)alfa\s*midi`)},
-	{"Alfamart", regexp.MustCompile(`(?i)alfa\s*mart|alfa\s*express`)},
+	{"Alfamart", regexp.MustCompile(`(?i)alfa\s*mart|alfa\s*expres`)},
 	{"Lawson", regexp.MustCompile(`(?i)lawson`)},
 	{"Circle K", regexp.MustCompile(`(?i)circle\s*-?\s*k\b`)},
 	{"7-Eleven", regexp.MustCompile(`(?i)7\s*-?\s*eleven|seven\s*eleven`)},
@@ -52,8 +55,10 @@ func BrandOf(text string) string {
 
 var (
 	reFamilyMart = regexp.MustCompile(`(?i)family\s*mart`)
-	// reNotAShop: warehouses / offices that carry a chain name
-	reNotAShop  = regexp.MustCompile(`(?i)\b(dc|gudang|warehouse|kantor|head office|distribution|kantor cabang)\b`)
+	// reNotAShop: warehouses / offices / ATMs that carry a chain name
+	// ("BII ATM Indomaret Karbela" came back from the brand search, API
+	// Lab 22 Oct)
+	reNotAShop  = regexp.MustCompile(`(?i)\b(dc|gudang|warehouse|kantor|head office|distribution|kantor cabang|atm)\b`)
 	reVape      = regexp.MustCompile(`(?i)\bvape|vapor|vapour`)
 	reNotOffice = regexp.MustCompile(`(?i)(pos satpam|pos ronda|pos kamling|poskamling|pos (rt|rw)|sekretariat (rt|rw)|rt\.? ?\d+ ?/? ?rw)`)
 	reNormDrop  = regexp.MustCompile(`\b(the|apartemen|apartement|apartment|apartments|apt)\b`)
@@ -63,8 +68,15 @@ var (
 // IsFamilyMart: our own stores come from MStore, never from the map data.
 func IsFamilyMart(name string) bool { return reFamilyMart.MatchString(name) }
 
-// IsNotAShop: a chain name on a warehouse or office.
+// IsNotAShop: a chain name on a warehouse, office or ATM.
 func IsNotAShop(name string) bool { return reNotAShop.MatchString(name) }
+
+// notAShopTypes: Google primary types that are never a minimarket (an
+// "ATM Indomaret" is an atm, not a store).
+var notAShopTypes = map[string]bool{"atm": true, "bank": true}
+
+// IsNotAShopType: a Google primary type that is never a minimarket.
+func IsNotAShopType(primaryType string) bool { return notAShopTypes[primaryType] }
 
 // OverpassAreaQuery is the Overpass query for every counted category in
 // the box around the circle (the circle is applied afterwards).
@@ -74,7 +86,7 @@ func OverpassAreaQuery(lat float64, lng float64, radiusM int) string {
 	return `[out:json][timeout:60][bbox:` + bb + `];
 (
   nwr[shop~"^(convenience|supermarket|minimarket)$"];
-  nwr[shop][name~"indomaret|alfa ?mart|alfa ?midi|alfa ?express|lawson|circle ?k|7.?eleven|k3 ?mart|yo ?mart|lulu ?mart",i];
+  nwr[shop][name~"indo ?-?mare?t|alfa ?mart|alfa ?midi|alfa ?expres|lawson|circle ?k|7.?eleven|k3 ?mart|yo ?mart|lulu ?mart",i];
   nwr[office][name];
   nwr[building=office][name];
   nwr[building=commercial][name~"menara|tower|wisma|graha|plaza|gedung|office",i];

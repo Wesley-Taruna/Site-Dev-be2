@@ -38,10 +38,15 @@ type nearbyMocks struct {
 	overpass *mocks.IOverpassClient
 }
 
+// allNearbyKey: the cache key prefix with all five categories on (the
+// site-dev-api §6 behaviour these tests were written for).
+const allNearbyKey = "v2:competitor+office+school+university+apartment:"
+
 func newTestNearby(t *testing.T, enabled bool) (*NearbyPlaceService, nearbyMocks) {
 	m := nearbyMocks{mocks.NewINearbyAreaRepository(t), mocks.NewISiteRepository(t), mocks.NewIPlacesClient(t), mocks.NewIOverpassClient(t)}
 	cfg := loadNearbyConfig(nil)
 	cfg.enabled = enabled
+	cfg.categories = constants.NearbyCategories
 	return &NearbyPlaceService{opt: testOptions(), RepositoryNearbyArea: m.area, RepositorySite: m.site, ClientPlaces: m.places, ClientOverpass: m.overpass,
 		cfg: cfg, state: &nearbyState{inflight: map[string]*inflightArea{}}, now: func() time.Time { return time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC) }}, m
 }
@@ -58,10 +63,10 @@ func TestNearbyGetArea_OffIs503(t *testing.T) {
 
 func TestNearbyGetArea_OSMWhenNoGoogleKey(t *testing.T) {
 	s, m := newTestNearby(t, true)
-	m.area.On("GetArea", ctxAny, "v1:-6.886,107.613:500").Return(nil, false).Once()
+	m.area.On("GetArea", ctxAny, allNearbyKey+"-6.886,107.613:500").Return(nil, false).Once()
 	m.places.On("Configured").Return(false)
 	m.overpass.On("FetchArea", ctxAny, -6.886, 107.613, 620).Return(dagoPlaces(t), nil).Once()
-	m.area.On("SetArea", ctxAny, "v1:-6.886,107.613:500", mock.Anything, 6*time.Hour).Return().Once()
+	m.area.On("SetArea", ctxAny, allNearbyKey+"-6.886,107.613:500", mock.Anything, 6*time.Hour).Return().Once()
 	m.site.On("GetActiveStorePoints", ctxAny).Return([]model.StoreMap{{StoreCode: "3001", StoreName: "Dago Atas", Latitude: dagoLat - 0.004, Longitude: dagoLng}}, nil).Once()
 
 	res, err := s.GetArea(context.Background(), dto.NearbyPlacesRequestGet{Lat: dagoLat, Lng: dagoLng})
@@ -99,7 +104,7 @@ func TestNearbyGetArea_OSMWhenNoGoogleKey(t *testing.T) {
 
 func TestNearbyGetArea_CachedAndRadiusLimit(t *testing.T) {
 	s, m := newTestNearby(t, true)
-	m.area.On("GetArea", ctxAny, "v1:-6.886,107.613:300").Return([]byte(`{"at":1,"lat":-6.886,"lng":107.613,"radius":420,"source":"osm","places":[],"categories":{},"google_calls":0}`), true)
+	m.area.On("GetArea", ctxAny, allNearbyKey+"-6.886,107.613:300").Return([]byte(`{"at":1,"lat":-6.886,"lng":107.613,"radius":420,"source":"osm","places":[],"categories":{},"google_calls":0}`), true)
 	m.site.On("GetActiveStorePoints", ctxAny).Return(nil, errors.New("no access to AMFIBI_MASTER"))
 
 	res, err := s.GetArea(context.Background(), dto.NearbyPlacesRequestGet{Lat: dagoLat, Lng: dagoLng, RadiusM: 300})
@@ -118,6 +123,7 @@ func TestNearbyGetArea_CachedAndRadiusLimit(t *testing.T) {
 func TestNearbyBuild_GoogleDeniedFallsBackAndSwitchesOff(t *testing.T) {
 	s, m := newTestNearby(t, true)
 	m.places.On("Configured").Return(true)
+	m.places.On("CallsPerArea").Return(10)
 	m.area.On("GoogleCallsLeft", ctxAny, int64(150)).Return(int64(150))
 	m.places.On("FetchArea", ctxAny, dagoLat, dagoLng, 620, mock.Anything).Return(client.PlacesArea{Calls: 1}, &client.PlacesDeniedError{Reason: "Places API (New) belum diaktifkan di project Google Cloud kunci ini"}).Once()
 	m.overpass.On("FetchArea", ctxAny, dagoLat, dagoLng, 620).Return(dagoPlaces(t), nil)
@@ -139,6 +145,7 @@ func TestNearbyBuild_GoogleDeniedFallsBackAndSwitchesOff(t *testing.T) {
 func TestNearbyBuild_GoogleWithFailedCategoryIsMixed(t *testing.T) {
 	s, m := newTestNearby(t, true)
 	m.places.On("Configured").Return(true)
+	m.places.On("CallsPerArea").Return(10)
 	m.area.On("GoogleCallsLeft", ctxAny, int64(150)).Return(int64(40))
 	m.area.On("TakeGoogleCall", ctxAny, int64(150)).Return(nil)
 	m.places.On("FetchArea", ctxAny, dagoLat, dagoLng, 620, mock.Anything).Return(func(ctx context.Context, _ float64, _ float64, _ int, take func(context.Context) error) (client.PlacesArea, error) {
@@ -162,12 +169,49 @@ func TestNearbyBuild_GoogleWithFailedCategoryIsMixed(t *testing.T) {
 func TestNearbyGoogleUsable_DailyCap(t *testing.T) {
 	s, m := newTestNearby(t, true)
 	m.places.On("Configured").Return(true)
-	m.area.On("GoogleCallsLeft", ctxAny, int64(150)).Return(int64(9))
+	m.places.On("CallsPerArea").Return(7)
+	m.area.On("GoogleCallsLeft", ctxAny, int64(150)).Return(int64(6)).Once()
 
 	ok, reason := s.googleUsable(context.Background())
 
 	assert.False(t, ok)
 	assert.Equal(t, "Batas harian panggilan Google hampir habis", reason)
+
+	m.area.On("GoogleCallsLeft", ctxAny, int64(150)).Return(int64(7)).Once()
+	ok, _ = s.googleUsable(context.Background())
+	assert.True(t, ok, "7 left is enough for one area of 7 calls")
+}
+
+// Default categories (API Lab demo view): only competitors and offices are
+// answered and given to the prompt, even when OSM has more.
+func TestNearbyGetArea_DefaultCategoriesOnly(t *testing.T) {
+	s, m := newTestNearby(t, true)
+	s.cfg.categories = loadNearbyConfig(nil).categories
+	key := "v2:competitor+office:-6.886,107.613:500"
+	m.area.On("GetArea", ctxAny, key).Return(nil, false).Once()
+	m.places.On("Configured").Return(false)
+	m.overpass.On("FetchArea", ctxAny, -6.886, 107.613, 620).Return(dagoPlaces(t), nil).Once()
+	m.area.On("SetArea", ctxAny, key, mock.Anything, 6*time.Hour).Return().Once()
+	m.site.On("GetActiveStorePoints", ctxAny).Return(nil, nil).Once()
+
+	res, err := s.GetArea(context.Background(), dto.NearbyPlacesRequestGet{Lat: dagoLat, Lng: dagoLng})
+
+	require.NoError(t, err)
+	got := map[string]int{}
+	for c, info := range res.Categories {
+		got[c] = info.Count
+	}
+	assert.Equal(t, map[string]int{"competitor": 3, "office": 2}, got)
+	for _, p := range res.Places {
+		assert.Contains(t, []string{"competitor", "office"}, p.Category)
+	}
+
+	measured := measuredFromArea(res)
+	assert.Equal(t, map[string]int{"competitor": 3, "office": 2}, measured.Counts)
+	body, err := client.GeminiRequest(client.GeminiInput{Site: &model.Site{SiteName1: "X", SiteCity: "Bandung"}, Measured: measured})
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "- Kantor: 2 tempat bernama")
+	assert.NotContains(t, string(body), "- Sekolah", "switched-off groups are not given to the AI as 0")
 }
 
 func TestMeasuredOffIsNil(t *testing.T) {

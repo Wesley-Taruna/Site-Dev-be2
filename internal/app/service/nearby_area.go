@@ -49,12 +49,12 @@ func countable(p dto.NearbyPlaceItem) bool {
 	return true
 }
 
-// areaForPoint filters a stored area to the circle around the exact point:
-// distances from the point, nearest first, each category count = the
-// places listed for it.
-func areaForPoint(st *storedArea, lat float64, lng float64, radiusM int) ([]dto.NearbyPlaceItem, map[string]dto.NearbyCategoryInfo) {
+// areaForPoint filters a stored area to the circle around the exact point
+// and to the categories switched on: distances from the point, nearest
+// first, each category count = the places listed for it.
+func areaForPoint(st *storedArea, lat float64, lng float64, radiusM int, categories []string) ([]dto.NearbyPlaceItem, map[string]dto.NearbyCategoryInfo) {
 	known := map[string]bool{}
-	for _, c := range constants.NearbyCategories {
+	for _, c := range categories {
 		known[c] = true
 	}
 
@@ -72,8 +72,8 @@ func areaForPoint(st *storedArea, lat float64, lng float64, radiusM int) ([]dto.
 	sort.SliceStable(places, func(i, j int) bool { return places[i].DistanceM < places[j].DistanceM })
 
 	shift := int(math.Round(haversineM(lat, lng, st.Lat, st.Lng)))
-	cats := make(map[string]dto.NearbyCategoryInfo, len(constants.NearbyCategories))
-	for _, c := range constants.NearbyCategories {
+	cats := make(map[string]dto.NearbyCategoryInfo, len(categories))
+	for _, c := range categories {
 		info, ok := st.Categories[c]
 		if !ok {
 			info = dto.NearbyCategoryInfo{Source: st.Source}
@@ -112,7 +112,10 @@ func measuredFromArea(area dto.NearbyAreaResponseGet) *dto.NearbyMeasured {
 	}
 	sources := map[string]bool{}
 	for _, c := range constants.NearbyCategories {
-		info := area.Categories[c]
+		info, ok := area.Categories[c]
+		if !ok {
+			continue // switched off (places.categories): not in the prompt
+		}
 		m.Counts[c] = info.Count
 		if info.Source != "" {
 			sources[info.Source] = true

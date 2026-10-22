@@ -1,7 +1,6 @@
 package client
 
 import (
-	"context"
 	"os"
 	"strings"
 	"testing"
@@ -19,9 +18,16 @@ func TestBrandOf(t *testing.T) {
 	for in, want := range map[string]string{
 		"Indomaret Point": "Indomaret", "Alfamidi Super": "Alfamidi", "Alfa Express": "Alfamart", "Alfamart Sudirman": "Alfamart",
 		"Circle-K": "Circle K", "7-Eleven": "7-Eleven", "K3Mart": "K3 Mart", "Warung Madura": "", "Circlekebab Corner": "",
+		// API Lab 22 Oct spelling variants
+		"Indomart Simpang": "Indomaret", "Indo Maret Dago": "Indomaret", "Alfa Expres Dago": "Alfamart",
 	} {
 		assert.Equal(t, want, BrandOf(in), in)
 	}
+	assert.True(t, IsNotAShop("BII ATM Indomaret Karbela"))
+	assert.True(t, IsNotAShop("Gudang Alfamart"))
+	assert.False(t, IsNotAShop("Indomaret Dago Atas"))
+	assert.True(t, IsNotAShopType("atm"))
+	assert.False(t, IsNotAShopType("convenience_store"))
 }
 
 func countBy(places []dto.NearbyPlaceItem) map[string]int {
@@ -67,13 +73,4 @@ func TestOverpassAreaQuery(t *testing.T) {
 	q := OverpassAreaQuery(dagoLat, dagoLng, 500)
 	assert.True(t, strings.HasPrefix(q, "[out:json][timeout:60][bbox:-6.89049,107.60848,-6.88151,107.61752];"), q[:80])
 	assert.True(t, strings.HasSuffix(q, "out center tags 5000;"))
-}
-
-func TestPendingProviders(t *testing.T) {
-	_, err := NewOverpassClient(nil).FetchArea(context.Background(), 0, 0, 0)
-	assert.ErrorIs(t, err, ErrOverpassNotSetUp)
-	p := NewPlacesClient(nil)
-	assert.False(t, p.Configured())
-	_, err = p.FetchArea(context.Background(), 0, 0, 0, nil)
-	assert.ErrorIs(t, err, ErrPlacesNotSetUp)
 }

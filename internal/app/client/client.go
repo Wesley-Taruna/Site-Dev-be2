@@ -18,9 +18,9 @@ type Clients struct {
 	Gemini      IGeminiClient      // AI insight (TODO: the HTTP call, plan Q4)
 	TaskQueue   ITaskQueueClient   // background jobs (TODO: Cloud Tasks, plan Q4)
 	Mail        IMailClient        // approval e-mail (TODO: the sender, plan Q4)
-	Geocoding   IGeocodingClient   // Google Geocoding API (ported, stdlib only)
-	Places      IPlacesClient      // nearby places, Google (TODO: the calls, plan Q4)
-	Overpass    IOverpassClient    // nearby places, OpenStreetMap (TODO: the calls, plan Q4)
+	Geocoding   IGeocodingClient   // Google Geocoding API (ported, stdlib; [geocoding] enabled)
+	Places      IPlacesClient      // nearby places, Google Places (New) (stdlib, off by default)
+	Overpass    IOverpassClient    // nearby places, OpenStreetMap Overpass (stdlib, free fallback)
 }
 
 // NewClients builds every client from the config; called once at start

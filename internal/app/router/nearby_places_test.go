@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"site-dev-backend/internal/app/client"
+	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 	"site-dev-backend/internal/app/mocks"
 	"site-dev-backend/internal/pkg/sqlfake"
@@ -73,7 +74,13 @@ const dLat, dLng = -6.8860, 107.6130
 
 func placesOn(t *testing.T) *mocks.IOverpassClient {
 	testEnv.Set("places.enabled", true)
-	t.Cleanup(func() { testEnv.Set("places.enabled", false) })
+	// all five categories = the 2191e07 answer these tests compare with
+	// (the default since 22 Oct is competitor + office, API Lab demo view)
+	testEnv.Set("places.categories", constants.NearbyCategories)
+	t.Cleanup(func() {
+		testEnv.Set("places.enabled", false)
+		testEnv.Set("places.categories", []string{})
+	})
 	osm := mocks.NewIOverpassClient(t)
 	withClients(t, func(c *client.Clients) { c.Overpass = osm })
 	raw, err := os.ReadFile("../client/testdata/overpass_dago.json")
@@ -112,7 +119,7 @@ func TestNearbyPlaces(t *testing.T) {
 	assert.Equal(t, &oldNearestStoreResp{Name: "Dago Atas", Code: "3001", DistanceM: 445, Within1Km: 1}, want.NearestFamilyMart)
 	assert.Equal(t, 3, want.Categories["competitor"].Count)
 	assert.Equal(t, "Indomaret Fresh Dago", want.Places[0].Name)
-	assert.Equal(t, 6*time.Hour, redis.TTL("site-dev-api:test:cache:nearby_area:v1:-6.886,107.613:500:"), "OSM fallback cached 6 h")
+	assert.Equal(t, 6*time.Hour, redis.TTL("site-dev-api:test:cache:nearby_area:v2:competitor+office+school+university+apartment:-6.886,107.613:500:"), "OSM fallback cached 6 h")
 
 	code, body = call(t, h, http.MethodGet, "/v1/site/nearby-places?lat=-6.886&lng=107.613", nil, 1001)
 	require.Equal(t, http.StatusOK, code)

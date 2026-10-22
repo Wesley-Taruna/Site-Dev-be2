@@ -534,6 +534,9 @@ func formatMeasured(m *dto.NearbyMeasured) string {
 	src := NearbySourceLabel(m.Source)
 	var lines []string
 	for _, c := range constants.NearbyCategories {
+		if _, ok := m.Counts[c]; !ok {
+			continue // category switched off (places.categories)
+		}
 		var items []dto.NearbyMeasuredItem
 		for _, x := range m.Items {
 			if x.Category == c {

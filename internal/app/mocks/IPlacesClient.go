@@ -31,6 +31,20 @@ func (_m *IPlacesClient) Configured() bool {
 	return r0
 }
 
+// CallsPerArea provides a mock function with given fields:
+func (_m *IPlacesClient) CallsPerArea() int {
+	ret := _m.Called()
+
+	var r0 int
+	if rf, ok := ret.Get(0).(func() int); ok {
+		r0 = rf()
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).(int)
+	}
+
+	return r0
+}
+
 // FetchArea provides a mock function with given fields: ctx, lat, lng, radiusM, takeCall
 func (_m *IPlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, takeCall func(ctx context.Context) error) (client.
 	PlacesArea, error) {
