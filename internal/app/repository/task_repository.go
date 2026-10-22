@@ -290,7 +290,7 @@ func (r *TaskRepository) GetPortal(ctx context.Context, statuses []string, searc
 		Joins("JOIN Sites ON Sites.SiteID = Tasks.SiteID").
 		Where("Tasks.TaskStatus IN ?", statuses)
 	if search != "" {
-		db = db.Where("(Sites.SiteName1 LIKE ? OR Sites.SiteID LIKE ?)", "%"+search+"%", "%"+search+"%")
+		db = db.Where("Sites.SiteName1 LIKE ? OR Sites.SiteID LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
 
 	if err = db.Session(&gorm.Session{}).Count(&count).Error; err != nil {
