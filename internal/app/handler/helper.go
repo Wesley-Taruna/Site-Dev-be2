@@ -42,3 +42,33 @@ func splitList(v string) []string {
 	}
 	return out
 }
+
+// Page size of the November lists (Activity Log, portal): limit (or
+// per_page), default 20, at most 100. The older site-dev lists keep their
+// fixed 20 (dto.ListPageSize).
+const (
+	newListDefaultLimit = 20
+	newListMaxLimit     = 100
+)
+
+// newListPage is the familabs paginator with the page size read from
+// limit or per_page.
+func newListPage(ctx *familabs.Context) (page *familabs.Paginator, err error) {
+	if page, err = familabs.NewPaginator(ctx); err != nil {
+		return
+	}
+	limit := ctx.GetParamInt("limit")
+	if limit <= 0 {
+		limit = page.PerPage
+	}
+	if limit <= 0 {
+		limit = newListDefaultLimit
+	}
+	if limit > newListMaxLimit {
+		limit = newListMaxLimit
+	}
+	page.PerPage, page.Limit = limit, limit
+	page.Offset = (page.Page - 1) * limit
+	page.Start, page.End = page.Offset, page.Offset+limit
+	return
+}

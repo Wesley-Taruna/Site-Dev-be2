@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"site-dev-backend/internal/app/model"
 
@@ -226,6 +227,36 @@ func (_m *IApprovalRepository) GetDecisionRolesByTaskIDs(ctx context.Context, ta
 	var r0 []model.TaskDecisionRole
 	if ret.Get(0) != nil {
 		r0 = ret.Get(0).([]model.TaskDecisionRole)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetNewPendingByApprover provides a mock function with given fields: ctx, approverID, since
+func (_m *IApprovalRepository) GetNewPendingByApprover(ctx context.Context, approverID int64, since time.Time) ([]model.ApproverNewsRow, error) {
+	ret := _m.Called(ctx, approverID, since)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, time.Time) ([]model.ApproverNewsRow, error)); ok {
+		return rf(ctx, approverID, since)
+	}
+
+	var r0 []model.ApproverNewsRow
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.ApproverNewsRow)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetDivHeadReturnsAfterApproval provides a mock function with given fields: ctx, approverID, since
+func (_m *IApprovalRepository) GetDivHeadReturnsAfterApproval(ctx context.Context, approverID int64, since time.Time) ([]model.ApproverNewsRow, error) {
+	ret := _m.Called(ctx, approverID, since)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, time.Time) ([]model.ApproverNewsRow, error)); ok {
+		return rf(ctx, approverID, since)
+	}
+
+	var r0 []model.ApproverNewsRow
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]model.ApproverNewsRow)
 	}
 	return r0, ret.Error(1)
 }

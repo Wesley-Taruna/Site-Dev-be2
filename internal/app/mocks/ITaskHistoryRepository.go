@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"site-dev-backend/internal/app/model"
 
@@ -45,6 +46,32 @@ func (_m *ITaskHistoryRepository) Get(ctx context.Context, offset int, limit int
 		r0 = ret.Get(0).([]*model.TaskHistory)
 	}
 	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
+// GetFeedByCreator provides a mock function with given fields: ctx, creatorID, actions, notActorID, taskStatus, offset, limit
+func (_m *ITaskHistoryRepository) GetFeedByCreator(ctx context.Context, creatorID int64, actions []string, notActorID int64, taskStatus string, offset int, limit int) ([]*model.TaskHistory, int64, error) {
+	ret := _m.Called(ctx, creatorID, actions, notActorID, taskStatus, offset, limit)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, int64, string, int, int) ([]*model.TaskHistory, int64, error)); ok {
+		return rf(ctx, creatorID, actions, notActorID, taskStatus, offset, limit)
+	}
+
+	var r0 []*model.TaskHistory
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.TaskHistory)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
+// CountFeedSince provides a mock function with given fields: ctx, creatorID, actions, since
+func (_m *ITaskHistoryRepository) CountFeedSince(ctx context.Context, creatorID int64, actions []string, since time.Time) (int64, error) {
+	ret := _m.Called(ctx, creatorID, actions, since)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, time.Time) (int64, error)); ok {
+		return rf(ctx, creatorID, actions, since)
+	}
+
+	return ret.Get(0).(int64), ret.Error(1)
 }
 
 // Create provides a mock function with given fields: ctx, history

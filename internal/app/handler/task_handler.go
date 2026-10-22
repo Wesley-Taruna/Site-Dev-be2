@@ -22,6 +22,7 @@ type TaskHandler struct {
 	ServicesSiteContext service.ISiteContextService
 	ServicesAIInsight   service.IAIInsightService
 	ServicesSite        service.ISiteService
+	ServicesActivity    service.IActivityService
 }
 
 // URLMapping implements router.RouteHandlers
@@ -31,6 +32,7 @@ func (h *TaskHandler) URLMapping(r *echo.Group) {
 	h.ServicesSiteContext = service.NewSiteContextService()
 	h.ServicesAIInsight = service.NewAIInsightService()
 	h.ServicesSite = service.NewSiteService()
+	h.ServicesActivity = service.NewActivityService()
 
 	h.routes(r, middleware.NewMiddleware())
 }
@@ -43,6 +45,8 @@ func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/approval-history", h.ApprovalHistory, mw.Authorized())
 	r.GET("/status/count", h.StatusCount, mw.Authorized())
 	r.GET("/nearby", h.Nearby, mw.Authorized())
+	r.GET("/approver-news", h.ApproverNews, mw.Authorized())
+	r.POST("/approver-news/seen", h.ApproverNewsSeen, mw.Authorized())
 	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/history", h.History, mw.Authorized())
 	r.GET("/:id/attachment", h.Attachment, mw.Authorized())
@@ -393,6 +397,33 @@ func (h TaskHandler) ApprovalHistory(c echo.Context) (err error) {
 	}
 
 	ctx.DataList(rows, total, page)
+
+	return ctx.Serve(err)
+}
+
+// ApproverNews is GET /v1/task/approver-news: what is new for an approver
+// since the Persetujuan tab was last opened (November scope, prototype 21
+// Oct).
+func (h TaskHandler) ApproverNews(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	ctx.ResponseData, err = h.ServicesActivity.GetApproverNews(ctx.Request().Context(), userIDFromContext(ctx))
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// ApproverNewsSeen is POST /v1/task/approver-news/seen.
+func (h TaskHandler) ApproverNewsSeen(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	if err = h.ServicesActivity.MarkApproverNewsSeen(ctx.Request().Context(), userIDFromContext(ctx)); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
 
 	return ctx.Serve(err)
 }

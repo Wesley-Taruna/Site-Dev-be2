@@ -51,6 +51,34 @@ const (
 	TaskActionResubmit = "RESUBMIT"
 )
 
+// UserFeedSeen.Feed values (November scope): the staff's Activity Log and
+// the approver's "Baru" news.
+const (
+	FeedActivity     = "ACTIVITY"
+	FeedApproverNews = "APPROVER_NEWS"
+)
+
+// ActivityFeedActions are the history actions shown in the Activity Log
+// (API-CHANGES §13.4; not CREATE/UPDATE/FORWARD/COMPLETE).
+var ActivityFeedActions = []string{TaskActionSubmit, TaskActionResubmit, TaskActionApprove, TaskActionRevision, TaskActionHold, TaskActionRelease, TaskActionReject}
+
+// Activity filters (GET /v1/activity?filter=).
+const (
+	ActivityFilterAll    = "all"
+	ActivityFilterAction = "action" // needs my action: newest row per such request
+	ActivityFilterMine   = "mine"   // the approvers' decisions on my requests
+)
+
+// Approver news kinds (GET /v1/task/approver-news).
+const (
+	ApproverNewsNewTask         = "NEW_TASK"
+	ApproverNewsDivHeadReturned = "DIV_HEAD_RETURNED"
+)
+
+// FeedNeverSeenWindowHours: a feed never opened counts the last 3 days as
+// new (DEFAULT, as the prototype's first open; open for Wes).
+const FeedNeverSeenWindowHours = 72
+
 // Role IDs stored in Users.RoleID / Roles.RoleID. RoleUser (site staff) is
 // the only role whose lists are limited to its own records.
 const (

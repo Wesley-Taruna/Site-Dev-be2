@@ -211,6 +211,12 @@ var extraRoutes = map[string]bool{
 	"GET /v1/task/nearby": true,
 	// local §6 (2191e07), rewritten
 	"GET /v1/site/nearby-places": true,
+	// November scope (review §3a #32-#41)
+	"GET /v1/activity":                 true,
+	"GET /v1/activity/unread-count":    true,
+	"POST /v1/activity/seen":           true,
+	"GET /v1/task/approver-news":       true,
+	"POST /v1/task/approver-news/seen": true,
 }
 
 // TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends

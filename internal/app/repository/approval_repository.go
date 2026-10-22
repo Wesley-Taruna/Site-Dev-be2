@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"site-dev-backend/global"
 	"site-dev-backend/internal/app/constants"
@@ -46,6 +47,13 @@ type IApprovalRepository interface {
 	// every level of these tasks (all rounds) whose status is one of
 	// statuses (November scope: rejected_by_role).
 	GetDecisionRolesByTaskIDs(ctx context.Context, taskIDs []string, statuses []string) (rows []model.TaskDecisionRole, err error)
+	// GetNewPendingByApprover lists the levels of this approver that are
+	// PENDING and became so (UpdatedAt) after since: approver news NEW_TASK.
+	GetNewPendingByApprover(ctx context.Context, approverID int64, since time.Time) (rows []model.ApproverNewsRow, err error)
+	// GetDivHeadReturnsAfterApproval lists the Div Head REVISION decisions
+	// after since in rounds where this approver approved a lower level:
+	// approver news DIV_HEAD_RETURNED.
+	GetDivHeadReturnsAfterApproval(ctx context.Context, approverID int64, since time.Time) (rows []model.ApproverNewsRow, err error)
 }
 
 type ApprovalRepository struct {
@@ -319,6 +327,42 @@ func (r *ApprovalRepository) GetDecisionRolesByTaskIDs(ctx context.Context, task
 		Joins("JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID").
 		Where("ApprovalHDR.TaskID IN ? AND ApprovalDET.Status IN ?", taskIDs, statuses).
 		Order("ApprovalDET.ActedAt ASC").
+		Find(&rows).Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetNewPendingByApprover(ctx context.Context, approverID int64, since time.Time) (rows []model.ApproverNewsRow, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetNewPendingByApprover")
+	defer span.End()
+
+	err = r.approverRows(ctx).
+		Select("ApprovalHDR.TaskID, Tasks.SiteID, ApprovalDET.UpdatedAt AS At").
+		Where("ApprovalDET.ApproverID = ? AND ApprovalDET.Status = ? AND ApprovalDET.UpdatedAt > ?", approverID, constants.ApprovalDetailStatusPending, since).
+		Find(&rows).Error
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	return
+}
+
+func (r *ApprovalRepository) GetDivHeadReturnsAfterApproval(ctx context.Context, approverID int64, since time.Time) (rows []model.ApproverNewsRow, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "ApprovalRepository.GetDivHeadReturnsAfterApproval")
+	defer span.End()
+
+	approvedBelow := readDB(ctx, r.opt).Table("ApprovalDET AS mine").Select("1").
+		Where("mine.ApprovalHeaderID = ApprovalDET.ApprovalHeaderID AND mine.ApproverID = ? AND mine.Status = ? AND mine.Level < ApprovalDET.Level",
+			approverID, constants.ApprovalDetailStatusApproved)
+	err = r.approverRows(ctx).
+		Select("ApprovalHDR.TaskID, Tasks.SiteID, ApprovalDET.ActedAt AS At").
+		Where("ApprovalDET.Status = ? AND ApprovalDET.ApproverRoleID = ? AND ApprovalDET.ActedAt > ?", constants.ApprovalDetailStatusRevision, constants.RoleDivHead, since).
+		Where("EXISTS (?)", approvedBelow).
 		Find(&rows).Error
 	if err != nil {
 		span.RecordError(err)

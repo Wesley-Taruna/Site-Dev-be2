@@ -22,4 +22,6 @@ func init() {
 	handlers["attachment"] = &handler.AttachmentHandler{}
 	handlers["queue"] = &handler.QueueHandler{}
 	handlers["geocoding"] = &handler.GeocodingHandler{}
+	// November scope
+	handlers["activity"] = &handler.ActivityHandler{}
 }
