@@ -24,4 +24,5 @@ func init() {
 	handlers["geocoding"] = &handler.GeocodingHandler{}
 	// November scope
 	handlers["activity"] = &handler.ActivityHandler{}
+	handlers["competitor-brands"] = &handler.CompetitorBrandHandler{}
 }

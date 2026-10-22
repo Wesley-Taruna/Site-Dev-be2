@@ -217,6 +217,7 @@ var extraRoutes = map[string]bool{
 	"POST /v1/activity/seen":           true,
 	"GET /v1/task/approver-news":       true,
 	"POST /v1/task/approver-news/seen": true,
+	"GET /v1/competitor-brands":        true,
 }
 
 // TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends
