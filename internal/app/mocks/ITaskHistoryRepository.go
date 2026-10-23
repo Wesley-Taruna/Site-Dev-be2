@@ -74,6 +74,47 @@ func (_m *ITaskHistoryRepository) CountFeedSince(ctx context.Context, creatorID 
 	return ret.Get(0).(int64), ret.Error(1)
 }
 
+// GetFeedByApprover provides a mock function with given fields: ctx, approverID, actions, actorID, taskStatuses, offset, limit
+func (_m *ITaskHistoryRepository) GetFeedByApprover(ctx context.Context, approverID int64, actions []string, actorID int64, taskStatuses []string, offset int, limit int) ([]*model.TaskHistory, int64, error) {
+	ret := _m.Called(ctx, approverID, actions, actorID, taskStatuses, offset, limit)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, int64, []string, int, int) ([]*model.TaskHistory, int64, error)); ok {
+		return rf(ctx, approverID, actions, actorID, taskStatuses, offset, limit)
+	}
+
+	var r0 []*model.TaskHistory
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.TaskHistory)
+	}
+	return r0, ret.Get(1).(int64), ret.Error(2)
+}
+
+// CountFeedByApproverSince provides a mock function with given fields: ctx, approverID, actions, since
+func (_m *ITaskHistoryRepository) CountFeedByApproverSince(ctx context.Context, approverID int64, actions []string, since time.Time) (int64, error) {
+	ret := _m.Called(ctx, approverID, actions, since)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, time.Time) (int64, error)); ok {
+		return rf(ctx, approverID, actions, since)
+	}
+
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
+// GetByTaskIDsAndActor provides a mock function with given fields: ctx, taskIDs, actorID, action
+func (_m *ITaskHistoryRepository) GetByTaskIDsAndActor(ctx context.Context, taskIDs []string, actorID int64, action string) ([]*model.TaskHistory, error) {
+	ret := _m.Called(ctx, taskIDs, actorID, action)
+
+	if rf, ok := ret.Get(0).(func(context.Context, []string, int64, string) ([]*model.TaskHistory, error)); ok {
+		return rf(ctx, taskIDs, actorID, action)
+	}
+
+	var r0 []*model.TaskHistory
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]*model.TaskHistory)
+	}
+	return r0, ret.Error(1)
+}
+
 // Create provides a mock function with given fields: ctx, history
 func (_m *ITaskHistoryRepository) Create(ctx context.Context, history *model.TaskHistory) error {
 	ret := _m.Called(ctx, history)
