@@ -11,8 +11,8 @@ import (
 	"gitlab.com/fami-app-v2/familib/familabs/log"
 )
 
-// ActivityHandler is /v1/activity: the site staff's Activity Log
-// (November scope, API-CHANGES §13.4).
+// ActivityHandler is /v1/activity: the Activity Log of site staff, Dept
+// Head and Div Head (November scope, API-CHANGES §13.4; heads: Wes 23 Oct).
 type ActivityHandler struct {
 	Option           global.HandlerOptions
 	ServicesActivity service.IActivityService

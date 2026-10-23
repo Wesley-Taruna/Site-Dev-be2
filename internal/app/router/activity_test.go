@@ -1,7 +1,7 @@
 package router
 
 // November scope: Activity Log (API-CHANGES §13.4, prototype ActivityResp
-// 21 Oct) and approver news (prototype ApproverNewsResp 21 Oct). New
+// 21 Oct; Dept / Div Head too since Wes 23 Oct) and approver news (prototype ApproverNewsResp 21 Oct). New
 // endpoints: shapes and rules from site-dev-mobile src/lib/types.ts and
 // mock.ts (activityFor, approverNewsFor).
 
@@ -84,8 +84,8 @@ func TestActivity_Filters(t *testing.T) {
 	assert.Contains(t, rec.sqls[2], `AND TaskHistories.ActorID <> 1001`)
 }
 
-func TestActivity_StaffOnly(t *testing.T) {
-	h, rec, _ := stack(t, activityResults("DEPT_HEAD")...)
+func TestActivity_AdminEmpty(t *testing.T) {
+	h, rec, _ := stack(t, activityResults("ADMIN")...)
 
 	code, body := call(t, h, http.MethodGet, "/v1/activity", nil, 1001)
 	require.Equal(t, http.StatusOK, code, string(body))
@@ -95,6 +95,105 @@ func TestActivity_StaffOnly(t *testing.T) {
 	code, body = call(t, h, http.MethodGet, "/v1/activity/unread-count", nil, 1001)
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":{"count":0}}`), body)
+}
+
+// approverActivityResults: Dept Head citra (3001) on TS1 (staff andi sent
+// with a note, citra approved, Div Head dewi returned it to the staff) and
+// TS2 (citra holds it).
+// reader is 3001 (DEPT_HEAD) or 4001 (DIV_HEAD).
+func approverActivityResults(reader int64) []sqlfake.Result {
+	return []sqlfake.Result{
+		userRow(1001, "andi", "", "USER"),
+		userRow(3001, "citra", "", "DEPT_HEAD"),
+		userRow(4001, "dewi", "", "DIV_HEAD"),
+		feedSeenRow(reader, "ACTIVITY"),
+		{Match: `SELECT count(*) FROM "TaskHistories"`, Columns: []string{"count"}, Rows: [][]driver.Value{{int64(4)}}},
+		{Match: `SELECT TaskHistories.* FROM "TaskHistories"`, Columns: histCol, Rows: [][]driver.Value{
+			{int64(12), "TS1", "REVISION", int64(4001), "Site diminta revisi oleh dewi (Div Head) dengan catatan (Foto kurang)", acted, "DIV_HEAD", int64(1)},
+			{int64(11), "TS2", "HOLD", int64(3001), "Site ditahan (Hold Status) oleh citra (Dept Head) dengan alasan (Tunggu zonasi)", updated, "DEPT_HEAD", int64(1)},
+			{int64(10), "TS1", "APPROVE", int64(3001), "Site di approve oleh citra (Dept Head)", updated, "DEPT_HEAD", int64(1)},
+			{int64(2), "TS1", "SUBMIT", int64(1001), "Approval dikirim ke Dept Head, status PENDING (catatan: Dekat stasiun)", created, "USER", int64(1)},
+		}},
+		{Match: `SELECT * FROM "TaskHistories" WHERE TaskID IN`, Columns: histCol, Rows: [][]driver.Value{
+			{int64(10), "TS1", "APPROVE", int64(3001), "", updated, "DEPT_HEAD", int64(1)},
+		}},
+		{Match: `FROM "Tasks" WHERE TaskID IN`, Columns: taskColumnsNov, Rows: [][]driver.Value{
+			{"TS1", "ST1", "REVISION", int64(1001), int64(4001), created, acted, int64(1)},
+			{"TS2", "ST2", "HOLD_DEPT_HEAD", int64(1001), int64(3001), created, updated, int64(1)},
+		}},
+		{Match: `FROM "Sites" WHERE SiteID IN`, Columns: []string{"SiteID", "SiteName1"}, Rows: [][]driver.Value{{"ST1", "Toko Kemang"}, {"ST2", "Toko Dua"}}},
+	}
+}
+
+// approverFeed is the approver Activity Log base: requests where the reader
+// is in an approval round.
+func approverFeed(reader string) string {
+	return `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE ApprovalDET.ApproverID = ` + reader + `) AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')`
+}
+
+func TestActivity_DeptHead_All(t *testing.T) {
+	h, rec, _ := stack(t, approverActivityResults(3001)...)
+
+	code, body := call(t, h, http.MethodGet, "/v1/activity?page=1&limit=10", nil, 3001)
+
+	require.Equal(t, http.StatusOK, code, string(body))
+	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":[
+		{"id":12,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"REVISION","actor_id":4001,"actor_name":"dewi","actor_role":"DIV_HEAD","created_at":"2026-10-04T10:30:00Z","round":1,"needs_action":false,"unread":true,"notes":"Foto kurang","notice":"DIV_HEAD_RETURNED"},
+		{"id":11,"task_id":"TS2","site_id":"ST2","site_name_1":"Toko Dua","task_status":"HOLD_DEPT_HEAD","action":"HOLD","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":true,"unread":false,"notes":"Tunggu zonasi"},
+		{"id":10,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"APPROVE","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":false,"unread":false},
+		{"id":2,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"SUBMIT","actor_id":1001,"actor_name":"andi","actor_role":"USER","created_at":"2026-10-01T09:00:00Z","round":1,"needs_action":false,"unread":false,"notes":"Dekat stasiun"}],"total":4,"page":1,"per_page":10}`), body)
+	feed := approverFeed("3001")
+	assert.Equal(t, []string{
+		`SELECT * FROM "Users" WHERE UserID = 3001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		`SELECT * FROM "UserFeedSeen" WHERE UserID = 3001 AND Feed = 'ACTIVITY' ORDER BY "UserFeedSeen"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		`SELECT count(*) ` + feed,
+		`SELECT TaskHistories.* ` + feed + ` ORDER BY TaskHistories.CreatedAt DESC, TaskHistories.ID DESC OFFSET 0 ROW FETCH NEXT 10 ROWS ONLY`,
+	}, rec.sqls[:4])
+	assert.Equal(t, `SELECT * FROM "TaskHistories" WHERE TaskID IN ('TS1') AND ActorID = 3001 AND Action = 'APPROVE'`, rec.sqls[len(rec.sqls)-1])
+}
+
+func TestActivity_DivHead_AllAndFilters(t *testing.T) {
+	// Div Head: same feed, the Dept Head's moves too; no "Untuk Anda" notice
+	h, rec, _ := stack(t, approverActivityResults(4001)...)
+	code, body := call(t, h, http.MethodGet, "/v1/activity", nil, 4001)
+	require.Equal(t, http.StatusOK, code, string(body))
+	var rows []map[string]any
+	require.NoError(t, jsonUnmarshalData(body, &rows))
+	require.Len(t, rows, 4)
+	assert.Equal(t, "dewi", rows[0]["actor_name"])
+	assert.Nil(t, rows[0]["notice"])
+	assert.Equal(t, false, rows[0]["unread"], "own move")
+	assert.Equal(t, true, rows[1]["unread"], "the Dept Head's hold, after last open")
+	assert.Equal(t, false, rows[1]["needs_action"], "held at the Dept Head, not the Div Head")
+	assert.Contains(t, rec.sqls[2], `WHERE ApprovalDET.ApproverID = 4001)`)
+	for _, q := range rec.sqls {
+		assert.NotContains(t, q, `ActorID = 4001 AND Action = 'APPROVE'`)
+	}
+
+	// action: newest row per request now waiting for / held by this approver
+	h, rec, _ = stack(t, approverActivityResults(3001)...)
+	code, body = call(t, h, http.MethodGet, "/v1/activity?filter=action", nil, 3001)
+	require.Equal(t, http.StatusOK, code, string(body))
+	require.NoError(t, jsonUnmarshalData(body, &rows))
+	require.Len(t, rows, 2, "TS1 once (fixture also returns other rows; the status filter is in SQL)")
+	assert.Contains(t, rec.sqls[2], `AND Tasks.TaskStatus IN ('WAITING_DEPT_HEAD','HOLD_DEPT_HEAD')`)
+	assert.NotContains(t, rec.sqls[3], "FETCH NEXT")
+
+	// mine: "Keputusan saya", my own moves
+	h, rec, _ = stack(t, approverActivityResults(4001)...)
+	code, _ = call(t, h, http.MethodGet, "/v1/activity?filter=mine", nil, 4001)
+	require.Equal(t, http.StatusOK, code)
+	assert.Contains(t, rec.sqls[2], `AND TaskHistories.ActorID = 4001`)
+}
+
+func TestActivity_Approver_UnreadCount(t *testing.T) {
+	h, rec, _ := stack(t, approverActivityResults(4001)...)
+
+	code, body := call(t, h, http.MethodGet, "/v1/activity/unread-count", nil, 4001)
+
+	require.Equal(t, http.StatusOK, code, string(body))
+	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":{"count":4}}`), body)
+	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE ApprovalDET.ApproverID = 4001) AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')) AND (TaskHistories.ActorID <> 4001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
 }
 
 func TestActivity_UnreadCountAndSeen(t *testing.T) {
