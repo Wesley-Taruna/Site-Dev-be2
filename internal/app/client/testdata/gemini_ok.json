@@ -1,0 +1,30 @@
+{
+ "candidates": [
+  {
+   "content": {
+    "parts": [
+     {
+      "text": "{\"overallScore\": 72, \"recommendation\": \"Recommended\", \"headline\": \"Ruko Kemang Raya — Recommended (72/100)\", \"narrative\": \"Lokasi layak dibuka. Lalu lintas ramai dan kompetitor masih terbatas.\", \"metrics\": {\"footTraffic\": {\"label\": \"Foot Traffic\", \"score\": 75, \"band\": \"good\", \"summary\": \"Foot Traffic cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"vehicleTraffic\": {\"label\": \"Lalu Lintas Kendaraan\", \"score\": 80, \"band\": \"good\", \"summary\": \"Lalu Lintas Kendaraan cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"demographics\": {\"label\": \"Demographics\", \"score\": 70, \"band\": \"good\", \"summary\": \"Demographics cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"competition\": {\"label\": \"Competition\", \"score\": 60, \"band\": \"moderate\", \"summary\": \"Competition cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"accessibility\": {\"label\": \"Accessibility\", \"score\": 78, \"band\": \"good\", \"summary\": \"Accessibility cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"economic\": {\"label\": \"Economic\", \"score\": 72, \"band\": \"good\", \"summary\": \"Economic cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}}, \"competitors\": [{\"name\": \"Indomaret Kemang Raya\", \"distanceKm\": 0.18, \"type\": \"Mini Market\"}, {\"name\": \"Alfamart Bangka\", \"distanceKm\": 0.42, \"type\": \"Mini Market\"}], \"risks\": [{\"title\": \"Parkir terbatas\", \"severity\": \"moderate\", \"mitigation\": \"Sewa lahan parkir motor di samping ruko.\"}], \"opportunities\": [\"Perkantoran di sekitar\", \"Jalan utama dua arah\", \"Belum ada convenience store 24 jam\"], \"confidenceLevel\": \"medium\", \"confidenceReason\": \"Survei lapangan lengkap, data demografi perkiraan.\", \"dataAssumptions\": [\"UMR DKI 2026\"], \"contextWarnings\": [{\"field\": \"footTraffic\", \"userClaim\": \"Ramai\", \"aiExpectation\": \"Sedang\", \"severity\": \"low\", \"message\": \"Klaim staf sedikit lebih tinggi dari perkiraan.\"}]}"
+     }
+    ],
+    "role": "model"
+   },
+   "finishReason": "STOP",
+   "index": 0
+  }
+ ],
+ "usageMetadata": {
+  "promptTokenCount": 3412,
+  "candidatesTokenCount": 1650,
+  "totalTokenCount": 7062,
+  "promptTokensDetails": [
+   {
+    "modality": "TEXT",
+    "tokenCount": 3412
+   }
+  ],
+  "thoughtsTokenCount": 2000
+ },
+ "modelVersion": "gemini-2.5-flash",
+ "responseId": "rec-shape-0001"
+}

@@ -2,8 +2,8 @@ package router
 
 // Side-by-side check, module 8 (AI insight): POST /v1/task/ai-insight,
 // /ai-insight/preview, GET /ai-insight/quota, /ai-insight/:site_id against
-// site-dev-api 20eeab4. Gemini is a mock (the real HTTP call is a TODO,
-// plan Q4).
+// site-dev-api 20eeab4. Gemini is a mock here (the real HTTP call is tested
+// with recorded-shape fixtures in client/gemini_client_test.go).
 
 import (
 	"database/sql/driver"
@@ -165,14 +165,16 @@ func TestSideBySide_GenerateAIInsight_QuotaUsedUp(t *testing.T) {
 	gemini.AssertNotCalled(t, "GenerateInsight")
 }
 
-func TestGenerateAIInsight_GeminiNotSetUpYet(t *testing.T) {
+// No gemini.apikey: the real client answers ErrGeminiNotSetUp, the API
+// answers 503 "AI not available" (the app then sends without AI score).
+func TestGenerateAIInsight_GeminiKeyNotSet(t *testing.T) {
 	withRedis(t)
 	h, _, _ := stack(t, detailResults("USER")...)
 
 	code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight", map[string]any{"site_id": "ST1"}, 1001)
 
-	assert.Equal(t, http.StatusInternalServerError, code)
-	assert.Contains(t, string(body), "gemini: client is not set up yet (TODO, plan Q4)")
+	assert.Equal(t, http.StatusServiceUnavailable, code)
+	assertSameJSON(t, []byte(`{"code":503,"status":"failure","message":"Service Unavailable","errors":{"error":"Analisis AI belum aktif di server ini (kunci Gemini belum diisi, gemini.apikey)."}}`), body)
 }
 
 func TestSideBySide_AIInsightQuota(t *testing.T) {
@@ -251,4 +253,56 @@ func TestSideBySide_PreviewAIInsight(t *testing.T) {
 
 	code, _ = call(t, h, http.MethodPost, "/v1/task/ai-insight/preview", map[string]any{"site": map[string]any{"site_name_1": "x"}}, 1001)
 	assert.Equal(t, http.StatusUnprocessableEntity, code) // DIFFERENCE: site-dev-api 500 (go-playground required)
+}
+
+// Gemini failures answer the "AI not available" codes the app knows (5xx:
+// send without AI score); the quota is still used (as site-dev-api).
+func TestAIInsight_GeminiFailureAnswers(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		code int
+		want string
+	}{
+		{&client.GeminiDeniedError{HTTPStatus: 400, Code: "API_KEY_INVALID", Reason: "kunci Gemini tidak valid", Message: "API key not valid."}, http.StatusServiceUnavailable,
+			`{"code":503,"status":"failure","message":"Service Unavailable","errors":{"error":"Analisis AI tidak tersedia: kunci Gemini tidak valid."}}`},
+		{&client.GeminiUpstreamError{Timeout: true, Detail: "no answer within 1m0s"}, http.StatusGatewayTimeout,
+			`{"code":504,"status":"failure","message":"Gateway Timeout","errors":{"error":"Analisis AI tidak tersedia: Gemini tidak menjawab tepat waktu. Coba lagi sebentar lagi."}}`},
+		{&client.GeminiUpstreamError{Detail: "HTTP 503 UNAVAILABLE"}, http.StatusBadGateway,
+			`{"code":502,"status":"failure","message":"Bad Gateway","errors":{"error":"Analisis AI tidak tersedia sekarang (Gemini gagal menjawab). Coba lagi sebentar lagi."}}`},
+	} {
+		gemini := withGemini(t)
+		redis := withRedis(t)
+		gemini.On("GenerateInsight", mock.Anything, mock.Anything).Return(dto.AIInsightResponseGet{}, "", tc.err)
+		h, _, _ := stack(t)
+
+		code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight/preview", map[string]any{
+			"site": map[string]any{"site_name_1": "Baru", "site_lat": -6.2, "site_lon": 106.8, "site_planned_opening_date": "2027-01-15"},
+		}, 1001)
+
+		assert.Equal(t, tc.code, code)
+		assertSameJSON(t, []byte(tc.want), body)
+		left, _ := redis.Get(quotaKey("ai_insight", 1001))
+		assert.Equal(t, "49", left, "one try used")
+	}
+}
+
+// Preview passes the November survey fields to the prompt (traffic, parking
+// and competitor notes), like a saved survey.
+func TestPreviewAIInsight_TrafficFieldsReachGemini(t *testing.T) {
+	gemini := withGemini(t)
+	withRedis(t)
+	gemini.On("GenerateInsight", mock.Anything, mock.MatchedBy(func(in client.GeminiInput) bool {
+		c := in.Context
+		return c != nil && c.VehicleTrafficLevel != nil && *c.VehicleTrafficLevel == "BUSY" && c.VehicleTrafficCount != nil && *c.VehicleTrafficCount == 40 &&
+			*c.VehicleTrafficMinutes == 10 && *c.VehicleTrafficNote == "macet sore" && *c.ParkingNote == "parkir motor" && *c.CompetitorNote == "Alfamart renovasi"
+	})).Return(geminiInsight(), "gemini-2.5-flash", nil)
+	h, _, _ := stack(t)
+
+	code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight/preview", map[string]any{
+		"site": map[string]any{"site_name_1": "Baru", "site_lat": -6.2, "site_lon": 106.8, "site_planned_opening_date": "2027-01-15"},
+		"context": map[string]any{"vehicle_traffic_level": "BUSY", "vehicle_traffic_count": 40, "vehicle_traffic_minutes": 10, "vehicle_traffic_note": "macet sore",
+			"parking_note": "parkir motor", "competitor_note": "Alfamart renovasi"},
+	}, 1001)
+
+	require.Equal(t, http.StatusOK, code, string(body))
 }

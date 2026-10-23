@@ -2,8 +2,8 @@ package client
 
 // Prompt, response schema and answer parsing of the Gemini insight, ported
 // unchanged from site-dev-api 20eeab4 internal/app/service/gemini_service.go
-// (itself a port of the web app's gemini.ts). Only the HTTP call is still a
-// TODO (see NewGeminiClient).
+// (itself a port of the web app's gemini.ts). The HTTP call is in
+// gemini_client.go.
 
 import (
 	"encoding/json"

@@ -1,0 +1,23 @@
+{
+ "candidates": [
+  {
+   "content": {
+    "parts": [
+     {
+      "text": "{\"overallScore\": 72, \"recommendation\": \"Recommended\", \"headline\": \"Ruko Kemang Raya \\u2014 Recommended (72/100)\", \"narrative\": \"Lokasi layak dibuka. Lalu lintas ramai dan kompetitor masih terbatas.\", \"metrics\": {\"footTraffic\": {\"label\": \"Foot Traffic\", \"score\": 75, \"band\": \"good\", \"summary\": \"Foot Traffic cukup baik di sekitar lokasi.\", \"factors\": [\"faktor 1\", \"faktor 2\"]}, \"vehicleTraffic\": {\"lab"
+     }
+    ],
+    "role": "model"
+   },
+   "finishReason": "MAX_TOKENS",
+   "index": 0
+  }
+ ],
+ "usageMetadata": {
+  "promptTokenCount": 3412,
+  "candidatesTokenCount": 200,
+  "totalTokenCount": 11412,
+  "thoughtsTokenCount": 7800
+ },
+ "modelVersion": "gemini-2.5-flash"
+}

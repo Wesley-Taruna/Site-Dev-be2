@@ -113,7 +113,7 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 	}
 
 	in.Measured = s.measuredFor(ctx, site.SiteLat, site.SiteLon)
-	insight, geminiModel, err := s.ClientGemini.GenerateInsight(ctx, in)
+	insight, geminiModel, err := s.askGemini(ctx, in)
 	if err != nil {
 		return
 	}
@@ -395,6 +395,14 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 			PublicTransport:        c.PublicTransport,
 			AnchorLandmark:         c.AnchorLandmark,
 			ObservedDemographics:   c.ObservedDemographics,
+			// November survey fields (the prompt's traffic lines, rules
+			// G/H), same as a saved survey (siteContextRows)
+			VehicleTrafficLevel:   nilIfEmpty(c.VehicleTrafficLevel),
+			VehicleTrafficCount:   c.VehicleTrafficCount,
+			VehicleTrafficMinutes: c.VehicleTrafficMinutes,
+			VehicleTrafficNote:    nilIfEmpty(c.VehicleTrafficNote),
+			ParkingNote:           nilIfEmpty(c.ParkingNote),
+			CompetitorNote:        nilIfEmpty(c.CompetitorNote),
 		}
 		for _, comp := range c.Competitors {
 			in.Competitors = append(in.Competitors, &model.SiteCompetitor{CompetitorName: comp.CompetitorName, CompetitorType: comp.CompetitorType, Distance: comp.Distance})
@@ -405,7 +413,7 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 	}
 
 	in.Measured = s.measuredFor(ctx, in.Site.SiteLat, in.Site.SiteLon)
-	res, _, err = s.ClientGemini.GenerateInsight(ctx, in)
+	res, _, err = s.askGemini(ctx, in)
 	if err == nil {
 		s.markDataSource(&res, in.Measured)
 	}
@@ -486,4 +494,48 @@ func (s *AIInsightService) markDataSource(insight *dto.AIInsightResponseGet, mea
 	}
 	insight.DataSource = insightDataSource(measured)
 	insight.Measured = measured
+}
+
+// askGemini calls Gemini, logs the token count of a real answer (cost) and
+// turns a failure into the "AI not available" answer the app knows (5xx:
+// the app sends without AI score):
+//   - no key (gemini.apikey empty) or Google refused (key invalid, API not
+//     enabled, Google quota used up, blocked answer): 503
+//   - Gemini did not answer in time: 504
+//   - any other Gemini failure (5xx after the retry, unreadable answer): 502
+//
+// The key is never in these texts (client redacts it).
+func (s *AIInsightService) askGemini(ctx context.Context, in client.GeminiInput) (insight dto.AIInsightResponseGet, geminiModel string, err error) {
+	var usage client.GeminiUsage
+	insight, geminiModel, err = s.ClientGemini.GenerateInsight(client.WithGeminiUsage(ctx, &usage), in)
+	if usage.Model != "" {
+		s.opt.Logger.AddMessage(log.InfoLevel, fmt.Sprintf("gemini %s: tokens prompt=%d output=%d thoughts=%d total=%d tries=%d",
+			usage.Model, usage.PromptTokens, usage.OutputTokens, usage.ThoughtsTokens, usage.TotalTokens, usage.Attempts)).Print()
+	}
+	if err == nil {
+		return
+	}
+	return dto.AIInsightResponseGet{}, "", geminiHTTPError(err)
+}
+
+// geminiHTTPError is the answer for a Gemini failure (see askGemini).
+func geminiHTTPError(err error) error {
+	var denied *client.GeminiDeniedError
+	var upstream *client.GeminiUpstreamError
+	var he *echo.HTTPError
+	switch {
+	case errors.As(err, &he):
+		return err
+	case errors.Is(err, client.ErrGeminiNotSetUp):
+		he = echo.NewHTTPError(http.StatusServiceUnavailable, "Analisis AI belum aktif di server ini (kunci Gemini belum diisi, gemini.apikey).")
+	case errors.As(err, &denied):
+		he = echo.NewHTTPError(http.StatusServiceUnavailable, "Analisis AI tidak tersedia: "+denied.Reason+".")
+	case errors.As(err, &upstream) && upstream.Timeout:
+		he = echo.NewHTTPError(http.StatusGatewayTimeout, "Analisis AI tidak tersedia: Gemini tidak menjawab tepat waktu. Coba lagi sebentar lagi.")
+	case errors.As(err, &upstream):
+		he = echo.NewHTTPError(http.StatusBadGateway, "Analisis AI tidak tersedia sekarang (Gemini gagal menjawab). Coba lagi sebentar lagi.")
+	default:
+		return err
+	}
+	return he.SetInternal(err)
 }

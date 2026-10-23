@@ -15,7 +15,7 @@ type Clients struct {
 	// them through the New...Client constructors):
 	ApprovalJWT IApprovalJWTClient // fami-module token for approval-link login
 	Storage     IStorageClient     // site photos (TODO: Google Cloud Storage, plan Q4)
-	Gemini      IGeminiClient      // AI insight (TODO: the HTTP call, plan Q4)
+	Gemini      IGeminiClient      // AI insight, Google Gemini generateContent (stdlib; on when gemini.apikey is set)
 	TaskQueue   ITaskQueueClient   // background jobs (TODO: Cloud Tasks, plan Q4)
 	Mail        IMailClient        // approval e-mail (TODO: the sender, plan Q4)
 	Geocoding   IGeocodingClient   // Google Geocoding API (ported, stdlib; [geocoding] enabled)
