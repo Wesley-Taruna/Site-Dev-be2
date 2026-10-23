@@ -74,12 +74,12 @@ func (_m *ITaskHistoryRepository) CountFeedSince(ctx context.Context, creatorID 
 	return ret.Get(0).(int64), ret.Error(1)
 }
 
-// GetFeedByApprover provides a mock function with given fields: ctx, approverID, actions, actorID, taskStatuses, offset, limit
-func (_m *ITaskHistoryRepository) GetFeedByApprover(ctx context.Context, approverID int64, actions []string, actorID int64, taskStatuses []string, offset int, limit int) ([]*model.TaskHistory, int64, error) {
-	ret := _m.Called(ctx, approverID, actions, actorID, taskStatuses, offset, limit)
+// GetFeedByApprover provides a mock function with given fields: ctx, approverID, actions, actorID, waitingOnly, offset, limit
+func (_m *ITaskHistoryRepository) GetFeedByApprover(ctx context.Context, approverID int64, actions []string, actorID int64, waitingOnly bool, offset int, limit int) ([]*model.TaskHistory, int64, error) {
+	ret := _m.Called(ctx, approverID, actions, actorID, waitingOnly, offset, limit)
 
-	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, int64, []string, int, int) ([]*model.TaskHistory, int64, error)); ok {
-		return rf(ctx, approverID, actions, actorID, taskStatuses, offset, limit)
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string, int64, bool, int, int) ([]*model.TaskHistory, int64, error)); ok {
+		return rf(ctx, approverID, actions, actorID, waitingOnly, offset, limit)
 	}
 
 	var r0 []*model.TaskHistory
@@ -98,6 +98,21 @@ func (_m *ITaskHistoryRepository) CountFeedByApproverSince(ctx context.Context, 
 	}
 
 	return ret.Get(0).(int64), ret.Error(1)
+}
+
+// GetTaskIDsWaitingFor provides a mock function with given fields: ctx, approverID, taskIDs
+func (_m *ITaskHistoryRepository) GetTaskIDsWaitingFor(ctx context.Context, approverID int64, taskIDs []string) ([]string, error) {
+	ret := _m.Called(ctx, approverID, taskIDs)
+
+	if rf, ok := ret.Get(0).(func(context.Context, int64, []string) ([]string, error)); ok {
+		return rf(ctx, approverID, taskIDs)
+	}
+
+	var r0 []string
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]string)
+	}
+	return r0, ret.Error(1)
 }
 
 // GetByTaskIDsAndActor provides a mock function with given fields: ctx, taskIDs, actorID, action

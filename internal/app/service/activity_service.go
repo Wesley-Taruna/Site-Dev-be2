@@ -23,8 +23,8 @@ import (
 // POST .../seen). November scope, API-CHANGES §13.4. Staff: the moves on
 // their own requests. Dept Head / Div Head (Wes, 23 Oct; replaces "staff
 // only" of 21 Oct): every move by anyone on the requests where they are in
-// the approval chain (DEFAULT scope, Wes can change). Other roles (ADMIN)
-// get empty answers.
+// any request sent at least once, any staff, any approval chain (Wes, 23
+// Oct). Other roles (ADMIN) get empty answers.
 type IActivityService interface {
 	Get(ctx context.Context, req dto.ActivityRequestGet, userID int64) (res []dto.ActivityResponseGet, total int64, err error)
 	UnreadCount(ctx context.Context, userID int64) (res dto.UnreadCountResponse, err error)
@@ -138,15 +138,9 @@ func (s *ActivityService) get(ctx context.Context, req dto.ActivityRequestGet, u
 	return
 }
 
-// approverStatuses are the task statuses that wait for this approver:
-// WAITING_<role> and HOLD_<role> ("Perlu tindakan").
-func approverStatuses(roleID string) []string {
-	return []string{constants.TaskStatusWaiting(roleID), constants.TaskStatusHold(roleID)}
-}
-
 // approverGet is the Dept Head / Div Head Activity Log (Wes, 23 Oct): all
-// feed moves, by staff and heads, on the requests where the approver is in
-// the approval chain. Filters: all; action = newest row per request now
+// feed moves, by staff and heads, on every request sent at least once.
+// Filters: all; action = newest row per request now
 // waiting for / held by this approver; mine = "Keputusan saya", the
 // approver's own moves. Rows also carry the person's note and, for the
 // Dept Head, the DIV_HEAD_RETURNED notice ("Untuk Anda").
@@ -157,13 +151,11 @@ func (s *ActivityService) approverGet(ctx context.Context, req dto.ActivityReque
 	if err != nil {
 		return
 	}
-	waiting := approverStatuses(user.RoleID)
-
 	var histories []*model.TaskHistory
 	switch req.Filter {
 	case constants.ActivityFilterAction:
 		var all []*model.TaskHistory
-		if all, _, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, 0, waiting, 0, 0); err != nil {
+		if all, _, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, 0, true, 0, 0); err != nil {
 			return
 		}
 		seenTask := map[string]bool{}
@@ -176,22 +168,35 @@ func (s *ActivityService) approverGet(ctx context.Context, req dto.ActivityReque
 		total = int64(len(histories))
 		histories = pageSlice(histories, req.Offset, req.Limit)
 	case constants.ActivityFilterMine:
-		histories, total, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, userID, nil, req.Offset, req.Limit)
+		histories, total, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, userID, false, req.Offset, req.Limit)
 	default:
-		histories, total, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, 0, nil, req.Offset, req.Limit)
+		histories, total, err = s.RepositoryTaskHistory.GetFeedByApprover(ctx, userID, constants.ActivityFeedActions, 0, false, req.Offset, req.Limit)
 	}
 	if err != nil || len(histories) == 0 {
 		return
 	}
 
-	res, err = s.rows(ctx, histories, userID, since, func(status string) bool {
-		return status == waiting[0] || status == waiting[1]
-	})
+	// needs_action: the request waits for / is held by THIS approver (his
+	// level PENDING or HOLD), not just any head of his role
+	taskIDs := make([]string, 0, len(histories))
+	for _, h := range histories {
+		taskIDs = append(taskIDs, h.TaskID)
+	}
+	waitingIDs, err := s.RepositoryTaskHistory.GetTaskIDsWaitingFor(ctx, userID, taskIDs)
+	if err != nil {
+		return
+	}
+	waiting := make(map[string]bool, len(waitingIDs))
+	for _, id := range waitingIDs {
+		waiting[id] = true
+	}
+	res, err = s.rows(ctx, histories, userID, since, func(string) bool { return false })
 	if err != nil {
 		return
 	}
 	for i, h := range histories {
 		res[i].Notes = activityNoteOf(h.Notes)
+		res[i].NeedsAction = waiting[h.TaskID]
 	}
 	if user.RoleID == constants.RoleDeptHead {
 		err = s.markDivHeadReturns(ctx, res, userID)

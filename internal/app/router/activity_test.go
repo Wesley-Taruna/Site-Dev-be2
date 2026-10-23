@@ -8,6 +8,7 @@ package router
 import (
 	"database/sql/driver"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,14 +123,20 @@ func approverActivityResults(reader int64) []sqlfake.Result {
 			{"TS2", "ST2", "HOLD_DEPT_HEAD", int64(1001), int64(3001), created, updated, int64(1)},
 		}},
 		{Match: `FROM "Sites" WHERE SiteID IN`, Columns: []string{"SiteID", "SiteName1"}, Rows: [][]driver.Value{{"ST1", "Toko Kemang"}, {"ST2", "Toko Dua"}}},
+		// TS2 waits for (is held by) citra only
+		{Match: `|3001 |PENDING |HOLD |TS`, Columns: []string{"TaskID"}, Rows: [][]driver.Value{{"TS2"}}},
 	}
 }
 
-// approverFeed is the approver Activity Log base: requests where the reader
-// is in an approval round.
-func approverFeed(reader string) string {
-	return `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE ApprovalDET.ApproverID = ` + reader + `) AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')`
+// waitingFor is the "now waits for / held by this approver" subquery.
+func waitingFor(reader string) string {
+	return `(SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE ApprovalDET.ApproverID = ` + reader + ` AND ApprovalDET.Status IN ('PENDING','HOLD'))`
 }
+
+// approverFeed is the approver Activity Log base: every request sent at
+// least once (has an ApprovalHDR round), whoever is in its chain (Wes, 23
+// Oct).
+const approverFeed = `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')`
 
 func TestActivity_DeptHead_All(t *testing.T) {
 	h, rec, _ := stack(t, approverActivityResults(3001)...)
@@ -142,13 +149,14 @@ func TestActivity_DeptHead_All(t *testing.T) {
 		{"id":11,"task_id":"TS2","site_id":"ST2","site_name_1":"Toko Dua","task_status":"HOLD_DEPT_HEAD","action":"HOLD","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":true,"unread":false,"notes":"Tunggu zonasi"},
 		{"id":10,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"APPROVE","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":false,"unread":false},
 		{"id":2,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"SUBMIT","actor_id":1001,"actor_name":"andi","actor_role":"USER","created_at":"2026-10-01T09:00:00Z","round":1,"needs_action":false,"unread":false,"notes":"Dekat stasiun"}],"total":4,"page":1,"per_page":10}`), body)
-	feed := approverFeed("3001")
+	feed := approverFeed
 	assert.Equal(t, []string{
 		`SELECT * FROM "Users" WHERE UserID = 3001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT * FROM "UserFeedSeen" WHERE UserID = 3001 AND Feed = 'ACTIVITY' ORDER BY "UserFeedSeen"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT count(*) ` + feed,
 		`SELECT TaskHistories.* ` + feed + ` ORDER BY TaskHistories.CreatedAt DESC, TaskHistories.ID DESC OFFSET 0 ROW FETCH NEXT 10 ROWS ONLY`,
 	}, rec.sqls[:4])
+	assert.Contains(t, rec.sqls, `SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE (ApprovalDET.ApproverID = 3001 AND ApprovalDET.Status IN ('PENDING','HOLD')) AND ApprovalHDR.TaskID IN ('TS1','TS2','TS1','TS1')`)
 	assert.Equal(t, `SELECT * FROM "TaskHistories" WHERE TaskID IN ('TS1') AND ActorID = 3001 AND Action = 'APPROVE'`, rec.sqls[len(rec.sqls)-1])
 }
 
@@ -164,8 +172,8 @@ func TestActivity_DivHead_AllAndFilters(t *testing.T) {
 	assert.Nil(t, rows[0]["notice"])
 	assert.Equal(t, false, rows[0]["unread"], "own move")
 	assert.Equal(t, true, rows[1]["unread"], "the Dept Head's hold, after last open")
-	assert.Equal(t, false, rows[1]["needs_action"], "held at the Dept Head, not the Div Head")
-	assert.Contains(t, rec.sqls[2], `WHERE ApprovalDET.ApproverID = 4001)`)
+	assert.Equal(t, false, rows[1]["needs_action"], "held by the Dept Head, not the Div Head")
+	assert.Equal(t, `SELECT count(*) `+approverFeed, rec.sqls[2], "all sent requests, no approver filter")
 	for _, q := range rec.sqls {
 		assert.NotContains(t, q, `ActorID = 4001 AND Action = 'APPROVE'`)
 	}
@@ -176,7 +184,7 @@ func TestActivity_DivHead_AllAndFilters(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, string(body))
 	require.NoError(t, jsonUnmarshalData(body, &rows))
 	require.Len(t, rows, 2, "TS1 once (fixture also returns other rows; the status filter is in SQL)")
-	assert.Contains(t, rec.sqls[2], `AND Tasks.TaskStatus IN ('WAITING_DEPT_HEAD','HOLD_DEPT_HEAD')`)
+	assert.Equal(t, `SELECT count(*) `+strings.Replace(approverFeed, "WHERE ", "WHERE (", 1)+`) AND TaskHistories.TaskID IN `+waitingFor("3001"), rec.sqls[2])
 	assert.NotContains(t, rec.sqls[3], "FETCH NEXT")
 
 	// mine: "Keputusan saya", my own moves
@@ -193,7 +201,7 @@ func TestActivity_Approver_UnreadCount(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":{"count":4}}`), body)
-	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalDET" JOIN ApprovalHDR ON ApprovalHDR.ID = ApprovalDET.ApprovalHeaderID WHERE ApprovalDET.ApproverID = 4001) AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')) AND (TaskHistories.ActorID <> 4001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
+	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')) AND (TaskHistories.ActorID <> 4001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
 }
 
 func TestActivity_UnreadCountAndSeen(t *testing.T) {
@@ -243,4 +251,26 @@ func TestApproverNews(t *testing.T) {
 	code, _ = call(t, h, http.MethodPost, "/v1/task/approver-news/seen", nil, 3001)
 	require.Equal(t, http.StatusOK, code)
 	assert.Contains(t, stableSQL(rec.sqls)[1], `WHERE UserID = 3001 AND Feed = 'APPROVER_NEWS'`)
+}
+
+// A head outside the requests' approval chain (second Dept Head 3002: no
+// ApprovalDET row anywhere) still sees every sent request (Wes, 23 Oct);
+// "Perlu tindakan" stays his own (TS2 is held by citra, not by him), and
+// no "Untuk Anda" since he approved nothing.
+func TestActivity_HeadOutsideChain_SeesAllSent(t *testing.T) {
+	results := append([]sqlfake.Result{userRow(3002, "eko", "", "DEPT_HEAD"), feedSeenRow(3002, "ACTIVITY"),
+		{Match: `SELECT * FROM "TaskHistories" WHERE TaskID IN`, Columns: histCol}}, approverActivityResults(3002)...)
+	h, rec, _ := stack(t, results...)
+
+	code, body := call(t, h, http.MethodGet, "/v1/activity", nil, 3002)
+
+	require.Equal(t, http.StatusOK, code, string(body))
+	var rows []map[string]any
+	require.NoError(t, jsonUnmarshalData(body, &rows))
+	require.Len(t, rows, 4)
+	assert.Equal(t, `SELECT count(*) `+approverFeed, rec.sqls[2], "no approver filter on the feed")
+	assert.Equal(t, `SELECT TaskHistories.* `+approverFeed+` ORDER BY TaskHistories.CreatedAt DESC, TaskHistories.ID DESC OFFSET 0 ROW FETCH NEXT 20 ROWS ONLY`, rec.sqls[3])
+	assert.Nil(t, rows[0]["notice"], "eko approved nothing")
+	assert.Equal(t, true, rows[1]["unread"], "citra's hold is someone else's move")
+	assert.Equal(t, false, rows[1]["needs_action"], "TS2 is held by citra, not by eko")
 }
