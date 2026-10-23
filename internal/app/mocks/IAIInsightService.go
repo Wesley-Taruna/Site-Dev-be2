@@ -64,12 +64,12 @@ func (_m *IAIInsightService) Persist(ctx context.Context, siteID string, insight
 	return r0
 }
 
-// GetQuota provides a mock function with given fields: ctx, actorID
-func (_m *IAIInsightService) GetQuota(ctx context.Context, actorID int64) (dto.AIInsightQuotaResponse, error) {
-	ret := _m.Called(ctx, actorID)
+// GetQuota provides a mock function with given fields: ctx, req, actorID
+func (_m *IAIInsightService) GetQuota(ctx context.Context, req dto.AIInsightQuotaRequestGet, actorID int64) (dto.AIInsightQuotaResponse, error) {
+	ret := _m.Called(ctx, req, actorID)
 
-	if rf, ok := ret.Get(0).(func(context.Context, int64) (dto.AIInsightQuotaResponse, error)); ok {
-		return rf(ctx, actorID)
+	if rf, ok := ret.Get(0).(func(context.Context, dto.AIInsightQuotaRequestGet, int64) (dto.AIInsightQuotaResponse, error)); ok {
+		return rf(ctx, req, actorID)
 	}
 
 	return ret.Get(0).(dto.AIInsightQuotaResponse), ret.Error(1)

@@ -14,8 +14,32 @@ type AIInsightRequestGenerate struct {
 // AIInsightQuotaResponse is GET /v1/task/ai-insight/quota (site-dev-api
 // AIInsightQuotaResp).
 type AIInsightQuotaResponse struct {
+	// Limit / Remaining: the caller's own analyses today (as site-dev-api)
 	Limit     int64 `json:"limit"`
 	Remaining int64 `json:"remaining"`
+	// Site: analyses at the asked location (?lat=&lng= or ?site_id=), all
+	// users, all rounds. Only while [ai_insight] site_quota is on and a
+	// location is asked (Wes, 23 Oct).
+	Site *AIInsightLimitCount `json:"site,omitempty"`
+	// ServerToday: analyses today by all users. Only while [ai_insight]
+	// daily_cap is on.
+	ServerToday *AIInsightLimitCount `json:"server_today,omitempty"`
+}
+
+// AIInsightLimitCount is one AI analysis limit: how many are allowed, used
+// and left.
+type AIInsightLimitCount struct {
+	Limit     int64 `json:"limit"`
+	Used      int64 `json:"used"`
+	Remaining int64 `json:"remaining"`
+}
+
+// AIInsightQuotaRequestGet is the query of GET /v1/task/ai-insight/quota:
+// optional location for the per-site count (lat+lng, or a saved site_id).
+type AIInsightQuotaRequestGet struct {
+	SiteID string
+	Lat    float64
+	Lng    float64
 }
 
 // PreviewSiteRequest is the site part of the preview: the site form without

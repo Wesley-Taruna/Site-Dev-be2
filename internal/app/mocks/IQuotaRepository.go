@@ -48,6 +48,20 @@ func (_m *IQuotaRepository) Consume(ctx context.Context, kind string, actorID in
 	return ret.Get(0).(int64), ret.Error(1)
 }
 
+// Release provides a mock function with given fields: ctx, kind, actorID
+func (_m *IQuotaRepository) Release(ctx context.Context, kind string, actorID int64) error {
+	ret := _m.Called(ctx, kind, actorID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64) error); ok {
+		r0 = rf(ctx, kind, actorID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // FlushUser provides a mock function with given fields: ctx, kind, actorID
 func (_m *IQuotaRepository) FlushUser(ctx context.Context, kind string, actorID int64) error {
 	ret := _m.Called(ctx, kind, actorID)

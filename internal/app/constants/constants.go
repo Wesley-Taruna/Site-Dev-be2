@@ -172,6 +172,21 @@ func QuotaSettingKey(kind string) string {
 	return kind + ".daily_quota"
 }
 
+// AI analysis limits on top of the per-user daily quota (Wes, 23 Oct),
+// env.toml [ai_insight]; 0 or missing = off (the default, as before):
+//   - site_quota: Gemini answers per site location (~110 m cell, all
+//     users, every round incl. resubmits; kept 365 days);
+//   - daily_cap: Gemini answers per day (Asia/Jakarta), all users.
+//
+// Only answered calls count (a failed Gemini call gives the count back).
+const (
+	AILimitSite  = "site"
+	AILimitTotal = "total"
+
+	AIInsightSiteQuotaKey = "ai_insight.site_quota"
+	AIInsightDailyCapKey  = "ai_insight.daily_cap"
+)
+
 // SiteAIMetrics.MetricKey values (the fixed metric names of the Gemini
 // answer), in the order they are stored.
 const (

@@ -256,7 +256,8 @@ func TestSideBySide_PreviewAIInsight(t *testing.T) {
 }
 
 // Gemini failures answer the "AI not available" codes the app knows (5xx:
-// send without AI score); the quota is still used (as site-dev-api).
+// send without AI score). DIFFERENCE (fix, 23 Oct): the quota is not used
+// (site-dev-api used one per failed try).
 func TestAIInsight_GeminiFailureAnswers(t *testing.T) {
 	for _, tc := range []struct {
 		err  error
@@ -282,7 +283,7 @@ func TestAIInsight_GeminiFailureAnswers(t *testing.T) {
 		assert.Equal(t, tc.code, code)
 		assertSameJSON(t, []byte(tc.want), body)
 		left, _ := redis.Get(quotaKey("ai_insight", 1001))
-		assert.Equal(t, "49", left, "one try used")
+		assert.Equal(t, "50", left, "a failed try is given back")
 	}
 }
 

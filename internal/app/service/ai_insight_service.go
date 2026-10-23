@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"site-dev-backend/internal/app/repository"
 
 	"github.com/labstack/echo/v4"
+	"gitlab.com/fami-app-v2/familib/familabs/env"
 	"gitlab.com/fami-app-v2/familib/familabs/log"
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
 )
@@ -24,21 +26,22 @@ import (
 const factorsSep = ";"
 
 type IAIInsightService interface {
-	// Generate is POST /v1/task/ai-insight (and the queue job): counts one
-	// from the caller's daily quota, asks Gemini, replaces the site's
-	// insight.
+	// Generate is POST /v1/task/ai-insight (and the queue job): asks
+	// Gemini, replaces the site's insight. Counts one against the caller's
+	// daily quota and the site / server-wide limits when Gemini answers.
 	Generate(ctx context.Context, siteID string, actorID int64) (res dto.AIInsightResponseGet, err error)
 	// Get is GET /v1/task/ai-insight/:site_id: the stored insight, with the
 	// competitors from the survey.
 	Get(ctx context.Context, siteID string) (res dto.AIInsightResponseGet, err error)
 	// Preview is POST /v1/task/ai-insight/preview: Gemini on data not saved
-	// yet; nothing is stored. Counts one from the quota.
+	// yet; nothing is stored. Counts like Generate.
 	Preview(ctx context.Context, req dto.AIInsightRequestPreview, actorID int64) (res dto.AIInsightResponseGet, err error)
 	// Persist stores an insight made earlier (preview) for siteID, without
 	// calling Gemini.
 	Persist(ctx context.Context, siteID string, insight dto.AIInsightResponseGet, actorID int64) (err error)
-	// GetQuota is GET /v1/task/ai-insight/quota (does not use any).
-	GetQuota(ctx context.Context, actorID int64) (res dto.AIInsightQuotaResponse, err error)
+	// GetQuota is GET /v1/task/ai-insight/quota (does not use any): the
+	// caller's daily quota, plus the site / server-wide limits when on.
+	GetQuota(ctx context.Context, req dto.AIInsightQuotaRequestGet, actorID int64) (res dto.AIInsightQuotaResponse, err error)
 	// FlushQuota is the 00:00 queue job: every user's AI counter is reset.
 	FlushQuota(ctx context.Context) (deleted int, err error)
 }
@@ -49,10 +52,32 @@ type AIInsightService struct {
 	RepositorySite          repository.ISiteRepository
 	RepositorySiteContext   repository.ISiteContextRepository
 	RepositoryQuota         repository.IQuotaRepository
+	RepositoryAILimit       repository.IAILimitRepository
 	RepositoryTransaction   repository.ITransactionRepository
 	ClientGemini            client.IGeminiClient
 	// ServicesNearby feeds measured map data into the prompt (local §6)
 	ServicesNearby INearbyPlaceService
+	limits         aiLimits
+}
+
+// aiLimits is env.toml [ai_insight] site_quota / daily_cap (0 = off), see
+// constants.AIInsightSiteQuotaKey.
+type aiLimits struct {
+	siteQuota int64
+	dailyCap  int64
+}
+
+func loadAILimits(env env.Provider) (l aiLimits) {
+	if env == nil {
+		return
+	}
+	if n := env.GetInt64(constants.AIInsightSiteQuotaKey); n > 0 {
+		l.siteQuota = n
+	}
+	if n := env.GetInt64(constants.AIInsightDailyCapKey); n > 0 {
+		l.dailyCap = n
+	}
+	return
 }
 
 func NewAIInsightService() IAIInsightService {
@@ -62,9 +87,11 @@ func NewAIInsightService() IAIInsightService {
 		RepositorySite:          repository.NewSiteRepository(),
 		RepositorySiteContext:   repository.NewSiteContextRepository(),
 		RepositoryQuota:         repository.NewQuotaRepository(),
+		RepositoryAILimit:       repository.NewAILimitRepository(),
 		RepositoryTransaction:   repository.NewTransactionRepository(),
 		ClientGemini:            global.Setup.Clients.Gemini,
 		ServicesNearby:          NewNearbyPlaceService(),
+		limits:                  loadAILimits(global.Setup.Common.Env),
 	}
 }
 
@@ -84,13 +111,24 @@ func (s *AIInsightService) Generate(ctx context.Context, siteID string, actorID 
 }
 
 func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID int64) (res dto.AIInsightResponseGet, err error) {
-	if err = s.useQuota(ctx, actorID); err != nil {
+	var held aiHeld
+	if err = s.holdUser(ctx, &held, actorID); err != nil {
 		return
 	}
+	// counted only once Gemini answered
+	answered := false
+	defer func() {
+		if !answered {
+			s.release(ctx, held)
+		}
+	}()
 
 	site, err := s.RepositorySite.GetByID(ctx, siteID)
 	if err != nil {
 		err = fmt.Errorf("site %s: %w", siteID, err)
+		return
+	}
+	if err = s.holdLimits(ctx, &held, site.SiteLat, site.SiteLon); err != nil {
 		return
 	}
 
@@ -117,6 +155,7 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 	if err != nil {
 		return
 	}
+	answered = true
 	s.markDataSource(&insight, in.Measured)
 
 	var row *model.SiteAIInsight
@@ -364,7 +403,12 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 	ctx, span := s.opt.Trace.Start(ctx, "AIInsightService.Preview")
 	defer span.End()
 
-	if err = s.useQuota(ctx, actorID); err != nil {
+	var held aiHeld
+	if err = s.holdUser(ctx, &held, actorID); err == nil {
+		err = s.holdLimits(ctx, &held, req.Site.SiteLat, req.Site.SiteLon)
+	}
+	if err != nil {
+		s.release(ctx, held)
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
 		return
@@ -418,6 +462,8 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 		s.markDataSource(&res, in.Measured)
 	}
 	if err != nil {
+		// Gemini failed: the try is not counted
+		s.release(ctx, held)
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
 		res = dto.AIInsightResponseGet{}
@@ -427,12 +473,15 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 	return
 }
 
-func (s *AIInsightService) GetQuota(ctx context.Context, actorID int64) (res dto.AIInsightQuotaResponse, err error) {
+func (s *AIInsightService) GetQuota(ctx context.Context, req dto.AIInsightQuotaRequestGet, actorID int64) (res dto.AIInsightQuotaResponse, err error) {
 	ctx, span := s.opt.Trace.Start(ctx, "AIInsightService.GetQuota")
 	defer span.End()
 
 	if res.Remaining, err = s.RepositoryQuota.Remaining(ctx, constants.QuotaAIInsight, actorID); err == nil {
 		res.Limit, err = s.RepositoryQuota.Limit(ctx, constants.QuotaAIInsight)
+	}
+	if err == nil {
+		err = s.limitCounts(ctx, req, &res)
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -457,9 +506,20 @@ func (s *AIInsightService) FlushQuota(ctx context.Context) (deleted int, err err
 	return
 }
 
-// useQuota counts one Gemini call; used up = 429 "Kuota generate AI insight
-// harian (<limit>) sudah habis, coba lagi besok."
-func (s *AIInsightService) useQuota(ctx context.Context, actorID int64) error {
+// aiHeld is what one AI analysis has taken from the limits, given back
+// when Gemini does not answer (release).
+type aiHeld struct {
+	actorID int64
+	user    bool
+	cell    string
+	site    bool
+	total   bool
+}
+
+// holdUser takes one from the caller's daily quota; used up = 429
+// "Kuota generate AI insight harian (<limit>) sudah habis, coba lagi
+// besok." (site-dev-api text).
+func (s *AIInsightService) holdUser(ctx context.Context, held *aiHeld, actorID int64) error {
 	_, err := s.RepositoryQuota.Consume(ctx, constants.QuotaAIInsight, actorID)
 	if errors.Is(err, repository.ErrAIInsightQuotaExceeded) {
 		limit, limitErr := s.RepositoryQuota.Limit(ctx, constants.QuotaAIInsight)
@@ -468,7 +528,99 @@ func (s *AIInsightService) useQuota(ctx context.Context, actorID int64) error {
 		}
 		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("Kuota generate AI insight harian (%d) sudah habis, coba lagi besok.", limit))
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	held.actorID, held.user = actorID, true
+	return nil
+}
+
+// holdLimits takes one from the site's limit (the location lat/lng) and
+// from today's server-wide limit, each only while on; reached = 429.
+func (s *AIInsightService) holdLimits(ctx context.Context, held *aiHeld, lat float64, lng float64) error {
+	if s.limits.siteQuota > 0 && (lat != 0 || lng != 0) {
+		cell := aiCell(lat, lng)
+		_, err := s.RepositoryAILimit.Take(ctx, constants.AILimitSite, cell, s.limits.siteQuota)
+		if errors.Is(err, repository.ErrAILimitReached) {
+			return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("Batas analisis AI untuk lokasi ini sudah tercapai (%dx).", s.limits.siteQuota)).SetInternal(err)
+		}
+		if err != nil {
+			return err
+		}
+		held.cell, held.site = cell, true
+	}
+	if s.limits.dailyCap > 0 {
+		_, err := s.RepositoryAILimit.Take(ctx, constants.AILimitTotal, "", s.limits.dailyCap)
+		if errors.Is(err, repository.ErrAILimitReached) {
+			return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("Batas analisis AI hari ini untuk semua pengguna sudah tercapai (%dx), coba lagi besok.", s.limits.dailyCap)).SetInternal(err)
+		}
+		if err != nil {
+			return err
+		}
+		held.total = true
+	}
+	return nil
+}
+
+// release gives back what held took (best effort, logged).
+func (s *AIInsightService) release(ctx context.Context, held aiHeld) {
+	var errs []error
+	if held.user {
+		errs = append(errs, s.RepositoryQuota.Release(ctx, constants.QuotaAIInsight, held.actorID))
+	}
+	if held.site {
+		errs = append(errs, s.RepositoryAILimit.Release(ctx, constants.AILimitSite, held.cell))
+	}
+	if held.total {
+		errs = append(errs, s.RepositoryAILimit.Release(ctx, constants.AILimitTotal, ""))
+	}
+	if err := errors.Join(errs...); err != nil {
+		s.opt.Logger.AddMessage(log.ErrorLevel, fmt.Errorf("ai_insight_service: give back unused AI analysis: %w", err)).Print()
+	}
+}
+
+// limitCounts fills res.Site (location asked) and res.ServerToday, each
+// only while that limit is on.
+func (s *AIInsightService) limitCounts(ctx context.Context, req dto.AIInsightQuotaRequestGet, res *dto.AIInsightQuotaResponse) (err error) {
+	if s.limits.siteQuota > 0 {
+		lat, lng := req.Lat, req.Lng
+		if req.SiteID != "" {
+			site, siteErr := s.RepositorySite.GetByID(ctx, req.SiteID)
+			if siteErr != nil {
+				return fmt.Errorf("site %s: %w", req.SiteID, siteErr)
+			}
+			lat, lng = site.SiteLat, site.SiteLon
+		}
+		if lat != 0 || lng != 0 {
+			var used int64
+			if used, err = s.RepositoryAILimit.Used(ctx, constants.AILimitSite, aiCell(lat, lng)); err != nil {
+				return
+			}
+			res.Site = limitCount(s.limits.siteQuota, used)
+		}
+	}
+	if s.limits.dailyCap > 0 {
+		var used int64
+		if used, err = s.RepositoryAILimit.Used(ctx, constants.AILimitTotal, ""); err != nil {
+			return
+		}
+		res.ServerToday = limitCount(s.limits.dailyCap, used)
+	}
+	return
+}
+
+func limitCount(limit int64, used int64) *dto.AIInsightLimitCount {
+	if used > limit {
+		used = limit
+	}
+	return &dto.AIInsightLimitCount{Limit: limit, Used: used, Remaining: limit - used}
+}
+
+// aiCell is the site key of the per-site limit: the point rounded to 3
+// decimals (~110 m, like the nearby cache), so a request not saved yet
+// (preview), its saved site and every resubmit count together.
+func aiCell(lat float64, lng float64) string {
+	return fmt.Sprintf("%.3f,%.3f", math.Round(lat*1000)/1000, math.Round(lng*1000)/1000)
 }
 
 // measuredFor is the nearby map data for the prompt (local §6). Best

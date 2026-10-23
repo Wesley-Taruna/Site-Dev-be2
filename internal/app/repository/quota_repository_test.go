@@ -38,10 +38,29 @@ func TestQuotaRepositoryConsume_CountsDownThenRefuses(t *testing.T) {
 
 	v, ok := get(fmt.Sprintf("site-dev-api:test:counter:ai_insight_quota:1001:%s:", today()))
 	assert.True(t, ok)
-	assert.Equal(t, "-1", v)
+	assert.Equal(t, "0", v, "a refused try is put back (was -1 before 23 Oct)")
 	remaining, err := r.Remaining(ctx, constants.QuotaAIInsight, 1001)
 	require.NoError(t, err)
-	assert.Equal(t, int64(0), remaining, "below zero is shown as 0")
+	assert.Equal(t, int64(0), remaining)
+}
+
+// Release gives back a use whose call failed; a counter that is gone
+// (flushed) is not created again.
+func TestQuotaRepositoryRelease(t *testing.T) {
+	r, _, get := newQuotaRepo(t, sqlfake.Result{Match: "|ai_insight.daily_quota", Columns: []string{"SettingKey", "SettingValue"}, Rows: [][]driver.Value{{"ai_insight.daily_quota", "3"}}})
+	ctx := context.Background()
+	key := fmt.Sprintf("site-dev-api:test:counter:ai_insight_quota:1001:%s:", today())
+
+	_, err := r.Consume(ctx, constants.QuotaAIInsight, 1001)
+	require.NoError(t, err)
+	require.NoError(t, r.Release(ctx, constants.QuotaAIInsight, 1001))
+	v, _ := get(key)
+	assert.Equal(t, "3", v)
+
+	require.NoError(t, r.FlushUser(ctx, constants.QuotaAIInsight, 1001))
+	require.NoError(t, r.Release(ctx, constants.QuotaAIInsight, 1001))
+	_, ok := get(key)
+	assert.False(t, ok, "no key made by a give-back")
 }
 
 func TestQuotaRepositoryLimit_Fallbacks(t *testing.T) {

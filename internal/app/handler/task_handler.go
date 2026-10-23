@@ -179,11 +179,25 @@ func (h TaskHandler) PreviewAIInsight(c echo.Context) (err error) {
 }
 
 // AIInsightQuota is GET /v1/task/ai-insight/quota: the caller's Gemini
-// calls left today.
+// calls left today; optional ?lat=&lng= (or ?site_id=) adds the count of
+// that location while the per-site limit is on.
 func (h TaskHandler) AIInsightQuota(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesAIInsight.GetQuota(ctx.Request().Context(), userIDFromContext(ctx))
+	req := dto.AIInsightQuotaRequestGet{SiteID: ctx.QueryParam("site_id")}
+	var parseErr error
+	if v := ctx.QueryParam("lat"); v != "" {
+		if req.Lat, parseErr = strconv.ParseFloat(v, 64); parseErr != nil {
+			return ctx.Serve(familabs.ErrorInvalid("lat"))
+		}
+	}
+	if v := ctx.QueryParam("lng"); v != "" {
+		if req.Lng, parseErr = strconv.ParseFloat(v, 64); parseErr != nil {
+			return ctx.Serve(familabs.ErrorInvalid("lng"))
+		}
+	}
+
+	ctx.ResponseData, err = h.ServicesAIInsight.GetQuota(ctx.Request().Context(), req, userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

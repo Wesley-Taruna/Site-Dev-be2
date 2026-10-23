@@ -43,6 +43,10 @@ type IQuotaRepository interface {
 	// Consume takes one from actorID's counter; below zero =
 	// ErrAIInsightQuotaExceeded / ErrGeocodingQuotaExceeded.
 	Consume(ctx context.Context, kind string, actorID int64) (remaining int64, err error)
+	// Release gives one back to actorID's counter of today (the call it was
+	// taken for did not happen or failed). A counter that is gone (flushed,
+	// new day) stays gone.
+	Release(ctx context.Context, kind string, actorID int64) (err error)
 	// FlushUser resets actorID's counter of today.
 	FlushUser(ctx context.Context, kind string, actorID int64) (err error)
 	// FlushAll deletes every user's counters of kind, any day; returns how
@@ -165,9 +169,36 @@ func (r *QuotaRepository) Consume(ctx context.Context, kind string, actorID int6
 		return
 	}
 	if remaining < 0 {
+		// refused: put it back so the counter stays at 0 (a later Release
+		// then cannot give back a use that never happened)
+		_ = client.Incr(ctx, key).Err()
 		err = quotaExceeded(kind)
 		span.RecordError(err)
 		remaining = 0
+		return
+	}
+
+	return
+}
+
+func (r *QuotaRepository) Release(ctx context.Context, kind string, actorID int64) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "QuotaRepository.Release")
+	defer span.End()
+
+	client, err := redisClient(r.opt, kind)
+	if err != nil {
+		span.RecordError(err)
+		return
+	}
+
+	key := r.key(kind, actorID)
+	n, err := client.Exists(ctx, key).Result()
+	if err != nil || n == 0 {
+		return
+	}
+	if err = client.Incr(ctx, key).Err(); err != nil {
+		err = fmt.Errorf("%s: incr %s: %w", kind, key, err)
+		span.RecordError(err)
 		return
 	}
 
