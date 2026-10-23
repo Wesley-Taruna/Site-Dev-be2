@@ -75,6 +75,20 @@ func TestGeocodingErrors(t *testing.T) {
 	})
 	_, err := c.Reverse(context.Background(), 1, 2)
 	assert.EqualError(t, err, "geocoding API status REQUEST_DENIED: bad key")
+	var denied *GeocodingDeniedError
+	require.True(t, errors.As(err, &denied), "refused key = typed error (service: 503)")
+	assert.Equal(t, "REQUEST_DENIED", denied.Status)
+
+	c = geoClient(func(*http.Request) (*http.Response, error) { return answer(403, `{"error":"forbidden"}`) })
+	_, err = c.Search(context.Background(), "x")
+	require.True(t, errors.As(err, &denied))
+	assert.Equal(t, "HTTP 403", denied.Status)
+
+	c = geoClient(func(*http.Request) (*http.Response, error) {
+		return answer(200, `{"status":"OVER_QUERY_LIMIT","error_message":"slow down"}`)
+	})
+	_, err = c.Reverse(context.Background(), 1, 2)
+	assert.False(t, errors.As(err, &denied), "other statuses stay plain errors")
 
 	c = geoClient(func(*http.Request) (*http.Response, error) { return nil, errors.New("dial tcp: i/o timeout") })
 	_, err = c.Reverse(context.Background(), 1, 2)
@@ -85,3 +99,4 @@ func TestGeocodingErrors(t *testing.T) {
 	_, err = (&GeocodingClient{http: http.DefaultClient}).Reverse(context.Background(), 1, 2)
 	assert.EqualError(t, err, "geocoding: apikey not configured (check [geocoding] section in config)")
 }
+

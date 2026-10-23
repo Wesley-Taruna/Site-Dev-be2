@@ -71,6 +71,7 @@ func (s *GeocodingService) Reverse(ctx context.Context, lat float64, lng float64
 
 	if err = s.useQuota(ctx, actorID); err == nil {
 		res, err = s.ClientGeocoding.Reverse(ctx, lat, lng)
+		err = geocodingDenied503(err)
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -88,6 +89,7 @@ func (s *GeocodingService) Search(ctx context.Context, query string, actorID int
 
 	if err = s.useQuota(ctx, actorID); err == nil {
 		res, err = s.ClientGeocoding.Search(ctx, query)
+		err = geocodingDenied503(err)
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -123,6 +125,17 @@ func (s *GeocodingService) useQuota(ctx context.Context, actorID int64) error {
 			return limitErr
 		}
 		return echo.NewHTTPError(http.StatusTooManyRequests, fmt.Sprintf("Kuota reverse-geocode harian (%d) sudah habis, coba lagi besok.", limit))
+	}
+	return err
+}
+
+// geocodingDenied503: Google refused the key (REQUEST_DENIED / 401 / 403)
+// = 503 "not available" like no key, not 500 (23 Oct); the answer names
+// Google's status word only.
+func geocodingDenied503(err error) error {
+	var denied *client.GeocodingDeniedError
+	if errors.As(err, &denied) {
+		return echo.NewHTTPError(http.StatusServiceUnavailable, "Alamat otomatis belum tersedia: Google menolak kunci Geocoding di server ini ("+denied.Status+").")
 	}
 	return err
 }

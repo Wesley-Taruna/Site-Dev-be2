@@ -16,6 +16,18 @@ import (
 	"gitlab.com/fami-app-v2/familib/familabs/env"
 )
 
+// GeocodingDeniedError: Google refused the key for Geocoding
+// (REQUEST_DENIED, or HTTP 401/403: API not allowed on the key, billing);
+// the service answers 503 "not available", like Places and Gemini.
+type GeocodingDeniedError struct {
+	Status  string
+	Message string
+}
+
+func (e *GeocodingDeniedError) Error() string {
+	return fmt.Sprintf("geocoding API status %s: %s", e.Status, e.Message)
+}
+
 // IGeocodingClient is the Google Geocoding API (point -> address, typed
 // address -> points), ported from site-dev-api (standard library only).
 type IGeocodingClient interface {
@@ -162,6 +174,9 @@ func (g *GeocodingClient) call(ctx context.Context, params url.Values) (googleGe
 		if len(snippet) > 300 {
 			snippet = snippet[:300]
 		}
+		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+			return googleGeocodeResponseBody{}, &GeocodingDeniedError{Status: fmt.Sprintf("HTTP %d", res.StatusCode), Message: snippet}
+		}
 		return googleGeocodeResponseBody{}, fmt.Errorf("geocoding API %d: %s", res.StatusCode, snippet)
 	}
 
@@ -173,6 +188,8 @@ func (g *GeocodingClient) call(ctx context.Context, params url.Values) (googleGe
 	switch parsed.Status {
 	case "OK", "ZERO_RESULTS":
 		return parsed, nil
+	case "REQUEST_DENIED":
+		return googleGeocodeResponseBody{}, &GeocodingDeniedError{Status: parsed.Status, Message: parsed.ErrorMessage}
 	default:
 		return googleGeocodeResponseBody{}, fmt.Errorf("geocoding API status %s: %s", parsed.Status, parsed.ErrorMessage)
 	}
