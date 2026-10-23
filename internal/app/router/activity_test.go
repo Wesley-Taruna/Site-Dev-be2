@@ -145,10 +145,10 @@ func TestActivity_DeptHead_All(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":[
-		{"id":12,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"REVISION","actor_id":4001,"actor_name":"dewi","actor_role":"DIV_HEAD","created_at":"2026-10-04T10:30:00Z","round":1,"needs_action":false,"unread":true,"notes":"Foto kurang","notice":"DIV_HEAD_RETURNED"},
-		{"id":11,"task_id":"TS2","site_id":"ST2","site_name_1":"Toko Dua","task_status":"HOLD_DEPT_HEAD","action":"HOLD","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":true,"unread":false,"notes":"Tunggu zonasi"},
+		{"id":12,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"REVISION","actor_id":4001,"actor_name":"dewi","actor_role":"DIV_HEAD","created_at":"2026-10-04T10:30:00Z","round":1,"needs_action":false,"unread":true,"notice":"DIV_HEAD_RETURNED"},
+		{"id":11,"task_id":"TS2","site_id":"ST2","site_name_1":"Toko Dua","task_status":"HOLD_DEPT_HEAD","action":"HOLD","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":true,"unread":false},
 		{"id":10,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"APPROVE","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":false,"unread":false},
-		{"id":2,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"SUBMIT","actor_id":1001,"actor_name":"andi","actor_role":"USER","created_at":"2026-10-01T09:00:00Z","round":1,"needs_action":false,"unread":false,"notes":"Dekat stasiun"}],"total":4,"page":1,"per_page":10}`), body)
+		{"id":2,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"SUBMIT","actor_id":1001,"actor_name":"andi","actor_role":"USER","created_at":"2026-10-01T09:00:00Z","round":1,"needs_action":false,"unread":false}],"total":4,"page":1,"per_page":10}`), body)
 	feed := approverFeed
 	assert.Equal(t, []string{
 		`SELECT * FROM "Users" WHERE UserID = 3001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
@@ -271,6 +271,9 @@ func TestActivity_HeadOutsideChain_SeesAllSent(t *testing.T) {
 	assert.Equal(t, `SELECT count(*) `+approverFeed, rec.sqls[2], "no approver filter on the feed")
 	assert.Equal(t, `SELECT TaskHistories.* `+approverFeed+` ORDER BY TaskHistories.CreatedAt DESC, TaskHistories.ID DESC OFFSET 0 ROW FETCH NEXT 20 ROWS ONLY`, rec.sqls[3])
 	assert.Nil(t, rows[0]["notice"], "eko approved nothing")
+	for _, r := range rows {
+		assert.NotContains(t, r, "notes", "no note/reason on Activity Log rows (Wes, 23 Oct)")
+	}
 	assert.Equal(t, true, rows[1]["unread"], "citra's hold is someone else's move")
 	assert.Equal(t, false, rows[1]["needs_action"], "TS2 is held by citra, not by eko")
 }

@@ -15,28 +15,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestActivityNoteOf(t *testing.T) {
-	cases := []struct {
-		name  string
-		notes string
-		want  string
-	}{
-		{"return to staff", "Site diminta revisi oleh dewi (Div Head) dengan catatan (Foto kurang)", "Foto kurang"},
-		{"hold", "Site ditahan (Hold Status) oleh citra (Dept Head) dengan alasan (Tunggu zonasi (RT 05))", "Tunggu zonasi (RT 05)"},
-		{"continue without note", "Hold Status dilepas oleh citra (Dept Head)", ""},
-		{"approve without note", "Site di approve oleh citra (Dept Head)", ""},
-		{"empty reason", "Site diminta revisi oleh dewi (Div Head) dengan catatan ()", ""},
-		{"send with note", "Approval dikirim ke Dept Head, status PENDING (catatan: Dekat stasiun)", "Dekat stasiun"},
-		{"send, automatic text", "Approval dikirim ke Dept Head, status PENDING (catatan: Site diajukan oleh andi untuk proses approval)", ""},
-		{"send without note", "Approval dikirim ke Dept Head, status PENDING", ""},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, activityNoteOf(c.notes))
-		})
-	}
-}
-
 func TestActivityService_MarkDivHeadReturns(t *testing.T) {
 	at := time.Date(2026, 10, 4, 10, 30, 0, 0, time.UTC)
 	round2 := 2

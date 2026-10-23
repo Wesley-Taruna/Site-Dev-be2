@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strings"
 	"time"
 
 	"site-dev-backend/global"
@@ -142,8 +141,9 @@ func (s *ActivityService) get(ctx context.Context, req dto.ActivityRequestGet, u
 // feed moves, by staff and heads, on every request sent at least once.
 // Filters: all; action = newest row per request now
 // waiting for / held by this approver; mine = "Keputusan saya", the
-// approver's own moves. Rows also carry the person's note and, for the
-// Dept Head, the DIV_HEAD_RETURNED notice ("Untuk Anda").
+// approver's own moves. Rows carry no note or reason (Wes, 23 Oct: as the
+// staff rows; the reason is in the request's history); the Dept Head gets
+// the DIV_HEAD_RETURNED notice ("Untuk Anda").
 func (s *ActivityService) approverGet(ctx context.Context, req dto.ActivityRequestGet, user *model.User) (res []dto.ActivityResponseGet, total int64, err error) {
 	res = []dto.ActivityResponseGet{}
 	userID := user.UserID
@@ -195,7 +195,6 @@ func (s *ActivityService) approverGet(ctx context.Context, req dto.ActivityReque
 		return
 	}
 	for i, h := range histories {
-		res[i].Notes = activityNoteOf(h.Notes)
 		res[i].NeedsAction = waiting[h.TaskID]
 	}
 	if user.RoleID == constants.RoleDeptHead {
@@ -239,29 +238,6 @@ func (s *ActivityService) markDivHeadReturns(ctx context.Context, res []dto.Acti
 		}
 	}
 	return nil
-}
-
-// activityNoteOf is the person's own note inside a history row's text:
-// the "(…)" part approvalHistoryMessage ("dengan catatan (…)", "dengan
-// alasan (…)") and submitTask ("(catatan: …)") write; "" when there is
-// none or it is the automatic "Site diajukan oleh …" text. DEFAULT: there
-// is no column for the raw note (as staffNoteOf).
-func activityNoteOf(notes string) string {
-	if !strings.HasSuffix(notes, ")") {
-		return ""
-	}
-	for _, marker := range []string{" dengan catatan (", " dengan alasan (", " (catatan: "} {
-		at := strings.Index(notes, marker)
-		if at < 0 {
-			continue
-		}
-		note := strings.TrimSpace(notes[at+len(marker) : len(notes)-1])
-		if strings.HasPrefix(note, "Site diajukan oleh ") && strings.HasSuffix(note, " untuk proses approval") {
-			return ""
-		}
-		return note
-	}
-	return ""
 }
 
 // pageSlice is one page of rows.

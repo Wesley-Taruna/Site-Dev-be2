@@ -13,10 +13,9 @@ type ActivityRequestGet struct {
 
 // ActivityResponseGet is one Activity Log row (November scope,
 // API-CHANGES §13.4, prototype ActivityResp). task_status is the request's
-// status now. Staff rows: no notes, no notice (prototype 21 Oct). Dept /
-// Div Head rows (Wes, 23 Oct): notes = the person's own note or reason
-// (left out when empty), notice DIV_HEAD_RETURNED for the Dept Head
-// ("Untuk Anda", left out otherwise).
+// status now. No note or reason on any row (Wes, 21 + 23 Oct; it is in the
+// request's history). notice: DIV_HEAD_RETURNED for the Dept Head ("Untuk
+// Anda"), left out otherwise (staff rows never have it).
 type ActivityResponseGet struct {
 	ID          uint      `json:"id"`
 	TaskID      string    `json:"task_id"`
@@ -31,7 +30,6 @@ type ActivityResponseGet struct {
 	Round       int       `json:"round"`
 	NeedsAction bool      `json:"needs_action"`
 	Unread      bool      `json:"unread"`
-	Notes       string    `json:"notes,omitempty"`
 	Notice      string    `json:"notice,omitempty"`
 }
 
