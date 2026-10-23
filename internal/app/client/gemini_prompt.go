@@ -431,16 +431,27 @@ type geminiPayload struct {
 	ContextWarnings  []dto.AIInsightContextWarning `json:"contextWarnings"`
 }
 
-// GeminiRequest is the JSON body site-dev-api posts to generateContent for
-// in (prompt + response schema, temperature 0.35, max 8000 tokens).
+// GeminiMaxOutputTokens is the default answer budget. site-dev-api sent
+// 8000, but on gemini-2.5-flash that budget also covers the model's
+// thinking (3,000-4,300 tokens in the live check of 23 Oct), and 1 of 6
+// real answers was cut off (MAX_TOKENS, no insight). 12000 leaves room; a
+// normal answer still uses ~5,000-7,000 (billed by use, not by the cap).
+const GeminiMaxOutputTokens = 12000
+
+// GeminiRequest is the JSON body posted to generateContent for in (prompt +
+// response schema, temperature 0.35, GeminiMaxOutputTokens).
 func GeminiRequest(in GeminiInput) ([]byte, error) {
+	return geminiRequest(in, GeminiMaxOutputTokens)
+}
+
+func geminiRequest(in GeminiInput, maxOutputTokens int) ([]byte, error) {
 	body := geminiRequestBody{
 		Contents: []geminiContent{{Parts: []geminiPart{{Text: buildPrompt(in.Site, in.Context, in.Competitors, in.Notes, in.Measured)}}}},
 	}
 	body.GenerationConfig.ResponseMimeType = "application/json"
 	body.GenerationConfig.ResponseSchema = responseSchema
 	body.GenerationConfig.Temperature = 0.35
-	body.GenerationConfig.MaxOutputTokens = 8000
+	body.GenerationConfig.MaxOutputTokens = maxOutputTokens
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -469,7 +480,7 @@ func ParseGeminiAnswer(respBytes []byte, site *model.Site, now time.Time) (dto.A
 		SiteID:           site.SiteID,
 		OverallScore:     out.OverallScore,
 		Recommendation:   out.Recommendation,
-		Headline:         out.Headline,
+		Headline:         headlineOf(site, out),
 		Narrative:        out.Narrative,
 		Metrics:          out.Metrics,
 		Competitors:      out.Competitors,
@@ -481,6 +492,18 @@ func ParseGeminiAnswer(respBytes []byte, site *model.Site, now time.Time) (dto.A
 		ContextWarnings:  out.ContextWarnings,
 		GeneratedAt:      now,
 	}, nil
+}
+
+// headlineOf is the fixed headline of the prompt ("<site name> — <rec>
+// (<score>/100)", rule 3), built here: in the live check (23 Oct) Gemini's
+// JSON mode sometimes garbled the dash (a literal "\u2014", or "\nA\n").
+// Gemini's own text is kept when the site has no name (preview without
+// one) or the answer has no recommendation.
+func headlineOf(site *model.Site, out geminiPayload) string {
+	if site == nil || strings.TrimSpace(site.SiteName1) == "" || out.Recommendation == "" {
+		return out.Headline
+	}
+	return fmt.Sprintf("%s — %s (%d/100)", site.SiteName1, out.Recommendation, out.OverallScore)
 }
 
 // --- local §6: measured map data in the prompt (site-dev-api 2191e07

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -109,18 +110,21 @@ type GeminiClient struct {
 	model     string
 	baseURL   string
 	http      *http.Client
+	maxOutput int
 	retryWait time.Duration
 	now       func() time.Time
 }
 
 // NewGeminiClient reads gemini.apikey (devops' secret store; empty = AI off,
-// every call answers ErrGeminiNotSetUp), gemini.model (gemini-2.5-flash)
-// and gemini.timeout_seconds (60, per try).
+// every call answers ErrGeminiNotSetUp), gemini.model (gemini-2.5-flash),
+// gemini.timeout_seconds (60, per try) and gemini.max_output_tokens
+// (GeminiMaxOutputTokens; thinking + answer).
 func NewGeminiClient(env env.Provider) IGeminiClient {
 	c := &GeminiClient{
 		model:     geminiDefaultModel,
 		baseURL:   geminiBaseURL,
 		http:      &http.Client{Timeout: 60 * time.Second},
+		maxOutput: GeminiMaxOutputTokens,
 		retryWait: 2 * time.Second,
 		now:       time.Now,
 	}
@@ -130,6 +134,9 @@ func NewGeminiClient(env env.Provider) IGeminiClient {
 		if n := env.GetInt("gemini.timeout_seconds"); n > 0 {
 			c.http.Timeout = time.Duration(n) * time.Second
 		}
+		if n := env.GetInt("gemini.max_output_tokens"); n > 0 {
+			c.maxOutput = n
+		}
 	}
 	return c
 }
@@ -138,9 +145,10 @@ func NewGeminiClient(env env.Provider) IGeminiClient {
 func (c *GeminiClient) Configured() bool { return c.apiKey != "" }
 
 // GenerateInsight posts GeminiRequest(in) (prompt + response schema,
-// temperature 0.35, max 8000 tokens) to <model>:generateContent and reads
+// temperature 0.35, gemini.max_output_tokens) to <model>:generateContent and reads
 // candidates[0].content.parts[0].text with ParseGeminiAnswer. One retry at
-// most, only on HTTP 5xx or a 429 rate limit (not a used-up quota).
+// most, only on HTTP 5xx, a 429 rate limit (not a used-up quota) or an
+// answer cut off at the token budget (MAX_TOKENS).
 func (c *GeminiClient) GenerateInsight(ctx context.Context, in GeminiInput) (insight dto.AIInsightResponseGet, geminiModel string, err error) {
 	ctx, span := geminiTracer.Start(ctx, "GeminiClient.GenerateInsight")
 	defer span.End()
@@ -157,19 +165,57 @@ func (c *GeminiClient) GenerateInsight(ctx context.Context, in GeminiInput) (ins
 	if in.Site == nil {
 		return insight, "", errors.New("gemini: no site")
 	}
-	payload, err := GeminiRequest(in)
+	maxOutput := c.maxOutput
+	if maxOutput <= 0 {
+		maxOutput = GeminiMaxOutputTokens
+	}
+	payload, err := geminiRequest(in, maxOutput)
 	if err != nil {
 		return insight, "", err
 	}
 
-	var raw []byte
-	attempts := 0
+	// One retry at most: on HTTP 5xx / 429 rate limit, or on an answer cut
+	// off at the token budget (live check 23 Oct: gemini-2.5-flash
+	// sometimes loops on "\n" inside a JSON string until the budget ends).
+	usage := GeminiUsage{Model: c.model}
+	defer func() {
+		span.SetAttributes(
+			attribute.Int("gemini.attempts", usage.Attempts),
+			attribute.Int("gemini.tokens.prompt", usage.PromptTokens),
+			attribute.Int("gemini.tokens.output", usage.OutputTokens),
+			attribute.Int("gemini.tokens.thoughts", usage.ThoughtsTokens),
+		)
+		if u, ok := ctx.Value(geminiUsageKey{}).(*GeminiUsage); ok && u != nil && usage.TotalTokens > 0 {
+			*u = usage
+		}
+	}()
 	for {
-		attempts++
-		var retry bool
-		raw, retry, err = c.call(ctx, payload)
-		if err == nil || !retry || attempts >= 2 {
-			break
+		usage.Attempts++
+		raw, retry, callErr := c.call(ctx, payload)
+		err = callErr
+		if err == nil {
+			var meta geminiAnswerMeta
+			_ = json.Unmarshal(raw, &meta)
+			// billed per try: add up
+			usage.PromptTokens += meta.UsageMetadata.PromptTokenCount
+			usage.OutputTokens += meta.UsageMetadata.CandidatesTokenCount
+			usage.ThoughtsTokens += meta.UsageMetadata.ThoughtsTokenCount
+			usage.TotalTokens += meta.UsageMetadata.TotalTokenCount
+			if err = answerProblem(meta); err == nil {
+				insight, err = ParseGeminiAnswer(raw, in.Site, c.now())
+				if err != nil {
+					return dto.AIInsightResponseGet{}, "", &GeminiUpstreamError{Detail: err.Error()}
+				}
+				return insight, c.model, nil
+			}
+			var up *GeminiUpstreamError
+			retry = errors.As(err, &up) && strings.Contains(up.Detail, "MAX_TOKENS")
+			if retry {
+				up.Detail += "; answer ends: " + answerTail(raw, 120)
+			}
+		}
+		if !retry || usage.Attempts >= 2 {
+			return insight, "", err
 		}
 		select {
 		case <-ctx.Done():
@@ -177,38 +223,6 @@ func (c *GeminiClient) GenerateInsight(ctx context.Context, in GeminiInput) (ins
 		case <-time.After(c.retryWait):
 		}
 	}
-	span.SetAttributes(attribute.Int("gemini.attempts", attempts))
-	if err != nil {
-		return insight, "", err
-	}
-
-	var meta geminiAnswerMeta
-	_ = json.Unmarshal(raw, &meta)
-	usage := GeminiUsage{
-		Model:          c.model,
-		PromptTokens:   meta.UsageMetadata.PromptTokenCount,
-		OutputTokens:   meta.UsageMetadata.CandidatesTokenCount,
-		ThoughtsTokens: meta.UsageMetadata.ThoughtsTokenCount,
-		TotalTokens:    meta.UsageMetadata.TotalTokenCount,
-		Attempts:       attempts,
-	}
-	span.SetAttributes(
-		attribute.Int("gemini.tokens.prompt", usage.PromptTokens),
-		attribute.Int("gemini.tokens.output", usage.OutputTokens),
-		attribute.Int("gemini.tokens.thoughts", usage.ThoughtsTokens),
-	)
-	if u, ok := ctx.Value(geminiUsageKey{}).(*GeminiUsage); ok && u != nil {
-		*u = usage
-	}
-	if err = answerProblem(meta); err != nil {
-		return insight, "", err
-	}
-
-	insight, err = ParseGeminiAnswer(raw, in.Site, c.now())
-	if err != nil {
-		return dto.AIInsightResponseGet{}, "", &GeminiUpstreamError{Detail: err.Error()}
-	}
-	return insight, c.model, nil
 }
 
 // geminiAnswerMeta is the part of a 200 answer besides the text: why it
@@ -367,4 +381,18 @@ func (c *GeminiClient) redact(s string) string {
 		return s
 	}
 	return strings.ReplaceAll(s, c.apiKey, "***")
+}
+
+// answerTail is the end of the answer text (site data only, no secrets), to
+// see where a cut answer ran away.
+func answerTail(raw []byte, n int) string {
+	var body geminiResponseBody
+	if json.Unmarshal(raw, &body) != nil || len(body.Candidates) == 0 || len(body.Candidates[0].Content.Parts) == 0 {
+		return "(none)"
+	}
+	r := []rune(body.Candidates[0].Content.Parts[0].Text)
+	if len(r) > n {
+		r = r[len(r)-n:]
+	}
+	return strconv.Quote(string(r))
 }

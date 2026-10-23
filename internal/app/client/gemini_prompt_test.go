@@ -49,7 +49,7 @@ func TestGeminiRequestAndAnswer(t *testing.T) {
 	cfg := req["generationConfig"].(map[string]any)
 	assert.Equal(t, "application/json", cfg["responseMimeType"])
 	assert.Equal(t, 0.35, cfg["temperature"])
-	assert.Equal(t, float64(8000), cfg["maxOutputTokens"])
+	assert.Equal(t, float64(12000), cfg["maxOutputTokens"]) // site-dev-api 8000: cut answers on 2.5-flash (thinking counts)
 
 	answer := `{"candidates":[{"content":{"parts":[{"text":"{\"overallScore\":74,\"recommendation\":\"Recommended\",\"metrics\":{\"footTraffic\":{\"score\":80,\"factors\":[\"a\"]}},\"opportunities\":[\"x\"]}"}]}}]}`
 	now := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)

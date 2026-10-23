@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"site-dev-backend/internal/app/model"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,7 +109,7 @@ func TestGemini_OK_ScoreCardWithSixMetrics(t *testing.T) {
 	assert.Equal(t, in.Site.SiteID, got.SiteID)
 	assert.Equal(t, 72, got.OverallScore)
 	assert.Equal(t, "Recommended", got.Recommendation)
-	assert.Equal(t, "Ruko Kemang Raya — Recommended (72/100)", got.Headline)
+	assert.Equal(t, "Kemang Timur — Recommended (72/100)", got.Headline, "built from the site name, not Gemini's text")
 	assert.Equal(t, 75, got.Metrics.FootTraffic.Score)
 	assert.Equal(t, 70, got.Metrics.Demographics.Score)
 	assert.Equal(t, 60, got.Metrics.Competition.Score)
@@ -128,6 +130,20 @@ func TestGemini_OK_ScoreCardWithSixMetrics(t *testing.T) {
 	assert.Equal(t, GeminiUsage{Model: "gemini-2.5-flash", PromptTokens: 3412, OutputTokens: 1650, ThoughtsTokens: 2000, TotalTokens: 7062, Attempts: 1}, usage)
 }
 
+func TestParseGeminiAnswer_HeadlineBuiltHere(t *testing.T) {
+	inner := `{"overallScore":81,"recommendation":"Recommended","headline":"Ruko \\u2014 Recommended (81/100)"}`
+	raw, err := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": inner}}}}}})
+	require.NoError(t, err)
+
+	got, err := ParseGeminiAnswer(raw, &model.Site{SiteName1: "Ruko Tebet"}, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, "Ruko Tebet — Recommended (81/100)", got.Headline)
+
+	got, err = ParseGeminiAnswer(raw, &model.Site{}, time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, `Ruko \u2014 Recommended (81/100)`, got.Headline, "no site name: Gemini's text")
+}
+
 func TestGemini_NoKey_NoCall(t *testing.T) {
 	c, f := geminiClient(t, fakeAnswer{200, "gemini_ok.json"})
 	c.apiKey = ""
@@ -143,6 +159,17 @@ func TestNewGeminiClient_OnWhenKeySet(t *testing.T) {
 	assert.False(t, off.Configured())
 	assert.Equal(t, "gemini-2.5-flash", off.model)
 	assert.Equal(t, 60*time.Second, off.http.Timeout)
+	assert.Equal(t, GeminiMaxOutputTokens, off.maxOutput)
+}
+
+func TestGemini_MaxOutputTokensFromConfig(t *testing.T) {
+	c, f := geminiClient(t, fakeAnswer{200, "gemini_ok.json"})
+	c.maxOutput = 9000
+
+	_, _, err := c.GenerateInsight(context.Background(), geminiTestInput())
+
+	require.NoError(t, err)
+	assert.Equal(t, float64(9000), f.calls[0].body["generationConfig"].(map[string]any)["maxOutputTokens"])
 }
 
 func TestGemini_Refusals_NoRetry(t *testing.T) {
@@ -197,18 +224,34 @@ func TestGemini_StillFailingAfterRetry(t *testing.T) {
 	assert.Len(t, f.calls, 2, "one retry at most")
 }
 
+func TestGemini_CutAnswer_RetriedOnce(t *testing.T) {
+	c, f := geminiClient(t, fakeAnswer{200, "gemini_max_tokens.json"}, fakeAnswer{200, "gemini_ok.json"})
+	var usage GeminiUsage
+
+	got, _, err := c.GenerateInsight(WithGeminiUsage(context.Background(), &usage), geminiTestInput())
+
+	require.NoError(t, err)
+	assert.Equal(t, 72, got.OverallScore)
+	assert.Len(t, f.calls, 2)
+	// both tries are billed: tokens added up
+	assert.Equal(t, GeminiUsage{Model: "gemini-2.5-flash", PromptTokens: 2 * 3412, OutputTokens: 200 + 1650, ThoughtsTokens: 7800 + 2000, TotalTokens: 11412 + 7062, Attempts: 2}, usage)
+}
+
 func TestGemini_CutAndBlockedAnswers(t *testing.T) {
-	c, _ := geminiClient(t, fakeAnswer{200, "gemini_max_tokens.json"})
+	c, f := geminiClient(t, fakeAnswer{200, "gemini_max_tokens.json"})
 	_, _, err := c.GenerateInsight(context.Background(), geminiTestInput())
 	var up *GeminiUpstreamError
 	require.True(t, errors.As(err, &up), "%v", err)
 	assert.Contains(t, err.Error(), "MAX_TOKENS")
+	assert.Contains(t, err.Error(), "answer ends: ")
+	assert.Len(t, f.calls, 2, "cut twice: one retry at most")
 
-	c, _ = geminiClient(t, fakeAnswer{200, "gemini_blocked.json"})
+	c, f = geminiClient(t, fakeAnswer{200, "gemini_blocked.json"})
 	_, _, err = c.GenerateInsight(context.Background(), geminiTestInput())
 	var denied *GeminiDeniedError
 	require.True(t, errors.As(err, &denied), "%v", err)
 	assert.Equal(t, "PROHIBITED_CONTENT", denied.Code)
+	assert.Len(t, f.calls, 1, "a blocked answer is not retried")
 }
 
 type timeoutErr struct{}
