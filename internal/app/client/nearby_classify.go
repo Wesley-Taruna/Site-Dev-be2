@@ -19,39 +19,15 @@ import (
 	"site-dev-backend/internal/pkg/geo"
 )
 
-type competitorBrand struct {
-	name string
-	re   *regexp.Regexp
-}
-
-// competitorBrands: order = match order (Alfamidi before Alfamart).
-// Patterns = API Lab src/lib/brands.ts (5289ab2, 22 Oct): spelling
-// variants seen in Google / OSM names ("Indomart", "Indo Maret",
-// "Alfa Expres").
-var competitorBrands = []competitorBrand{
-	{"Indomaret", regexp.MustCompile(`(?i)indo\s*-?\s*mare?t`)},
-	{"Alfamidi", regexp.MustCompile(`(?i)alfa\s*midi`)},
-	{"Alfamart", regexp.MustCompile(`(?i)alfa\s*mart|alfa\s*expres`)},
-	{"Lawson", regexp.MustCompile(`(?i)lawson`)},
-	{"Circle K", regexp.MustCompile(`(?i)circle\s*-?\s*k\b`)},
-	{"7-Eleven", regexp.MustCompile(`(?i)7\s*-?\s*eleven|seven\s*eleven`)},
-	{"K3 Mart", regexp.MustCompile(`(?i)k3\s*mart`)},
-	{"Yomart", regexp.MustCompile(`(?i)yo\s*mart`)},
-	{"Lulu Mart", regexp.MustCompile(`(?i)lulu\s*mart`)},
-}
-
-// BrandOther marks an unbranded minimarket; those are never counted.
+// BrandOther marks an unbranded minimarket (or a chain whose brand is not
+// active, e.g. 7-Eleven or Yomart since 23 Oct); those are never counted.
 const BrandOther = "Lainnya"
 
-// BrandOf is the chain name found in text, or "".
-func BrandOf(text string) string {
-	for _, b := range competitorBrands {
-		if b.re.MatchString(text) {
-			return b.name
-		}
-	}
-	return ""
-}
+// BrandOf is the chain name found in text with DefaultBrands, or "" (tests
+// and callers without a brand list; the nearby search uses a BrandSet).
+func BrandOf(text string) string { return defaultBrandSet.Of(text) }
+
+var defaultBrandSet = DefaultBrandSet()
 
 var (
 	reFamilyMart = regexp.MustCompile(`(?i)family\s*mart`)
@@ -79,15 +55,22 @@ var notAShopTypes = map[string]bool{"atm": true, "bank": true}
 func IsNotAShopType(primaryType string) bool { return notAShopTypes[primaryType] }
 
 // OverpassAreaQuery is the Overpass query for every counted category in
-// the box around the circle (the circle is applied afterwards).
-func OverpassAreaQuery(lat float64, lng float64, radiusM int) string {
+// the box around the circle (the circle is applied afterwards). Brand
+// names (active brands only) also find shops with another shop tag and
+// branded cafés (Kopi Kenangan, Tomoro Coffee).
+func OverpassAreaQuery(lat float64, lng float64, radiusM int, brands BrandSet) string {
 	minLat, maxLat, minLng, maxLng := geo.BoundingBox(lat, lng, float64(radiusM))
 	bb := fmt.Sprintf("%.5f,%.5f,%.5f,%.5f", minLat, minLng, maxLat, maxLng)
+	named := ""
+	if n := brands.overpassNames(); n != "" {
+		named = `  nwr[shop][name~"` + n + `",i];
+  nwr[amenity~"^(cafe|restaurant|fast_food)$"][name~"` + n + `",i];
+`
+	}
 	return `[out:json][timeout:60][bbox:` + bb + `];
 (
   nwr[shop~"^(convenience|supermarket|minimarket)$"];
-  nwr[shop][name~"indo ?-?mare?t|alfa ?mart|alfa ?midi|alfa ?expres|lawson|circle ?k|7.?eleven|k3 ?mart|yo ?mart|lulu ?mart",i];
-  nwr[office][name];
+` + named + `  nwr[office][name];
   nwr[building=office][name];
   nwr[building=commercial][name~"menara|tower|wisma|graha|plaza|gedung|office",i];
   nwr[amenity~"^(school|kindergarten|university|college)$"][name];
@@ -99,19 +82,30 @@ out center tags 5000;`
 }
 
 // osmCategoryOf classifies one OSM object.
-func osmCategoryOf(t map[string]string) (category string, brand string, ok bool) {
+func osmCategoryOf(t map[string]string, brands BrandSet) (category string, brand string, ok bool) {
 	name := t["name"]
 	if reFamilyMart.MatchString(t["brand"] + " " + name) {
 		return "", "", false
 	}
-	if t["shop"] != "" {
-		var parts []string
-		for _, k := range []string{"brand", "name", "operator"} {
-			if t[k] != "" {
-				parts = append(parts, t[k])
-			}
+	var parts []string
+	for _, k := range []string{"brand", "name", "operator"} {
+		if t[k] != "" {
+			parts = append(parts, t[k])
 		}
-		if b := BrandOf(strings.Join(parts, " ")); b != "" {
+	}
+	tagged := strings.Join(parts, " ")
+	if t["shop"] == "" {
+		switch t["amenity"] {
+		case "cafe", "restaurant", "fast_food":
+			// branded coffee chains only (Kopi Kenangan, Tomoro Coffee)
+			if b := brands.Of(tagged); b != "" {
+				return constants.NearbyCategoryCompetitor, b, true
+			}
+			return "", "", false
+		}
+	}
+	if t["shop"] != "" {
+		if b := brands.Of(tagged); b != "" {
 			return constants.NearbyCategoryCompetitor, b, true
 		}
 		if reVape.MatchString(name) {
@@ -161,8 +155,9 @@ type overpassElement struct {
 
 // ParseOverpassArea turns an Overpass JSON answer into the places within
 // radiusM of the point, nearest first; the same place mapped twice (same
-// category and name within 150 m) counts once.
-func ParseOverpassArea(raw []byte, lat float64, lng float64, radiusM int) ([]dto.NearbyPlaceItem, error) {
+// category and name within 150 m) counts once. Shops of a brand not in
+// brands are BrandOther (not counted).
+func ParseOverpassArea(raw []byte, lat float64, lng float64, radiusM int, brands BrandSet) ([]dto.NearbyPlaceItem, error) {
 	var parsed struct {
 		Elements []overpassElement `json:"elements"`
 	}
@@ -189,7 +184,7 @@ func ParseOverpassArea(raw []byte, lat float64, lng float64, radiusM int) ([]dto
 		if d > radiusM {
 			continue
 		}
-		cat, brand, ok := osmCategoryOf(el.Tags)
+		cat, brand, ok := osmCategoryOf(el.Tags, brands)
 		if !ok {
 			continue
 		}

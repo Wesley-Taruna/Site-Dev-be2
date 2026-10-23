@@ -1,0 +1,56 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_kk_1",
+   "displayName": {
+    "text": "Kopi Kenangan - Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8855,
+    "longitude": 107.6138
+   },
+   "types": [
+    "coffee_shop",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "coffee_shop"
+  },
+  {
+   "id": "TEST_kk_2",
+   "displayName": {
+    "text": "Kenangan Signature Dago",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8862,
+    "longitude": 107.6141
+   },
+   "types": [
+    "cafe",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "cafe"
+  },
+  {
+   "id": "TEST_kk_3",
+   "displayName": {
+    "text": "Kopi Kenangan Jauh",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.899,
+    "longitude": 107.613
+   },
+   "types": [
+    "coffee_shop",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "coffee_shop"
+  }
+ ]
+}

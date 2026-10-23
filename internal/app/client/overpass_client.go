@@ -24,8 +24,9 @@ var ErrOverpassUnavailable = errors.New("overpass: no OpenStreetMap server answe
 // the fallback source of nearby places.
 type IOverpassClient interface {
 	// FetchArea returns every counted OSM place within radiusM, nearest
-	// first (OverpassAreaQuery + ParseOverpassArea).
-	FetchArea(ctx context.Context, lat float64, lng float64, radiusM int) (places []dto.NearbyPlaceItem, err error)
+	// first (OverpassAreaQuery + ParseOverpassArea); competitors of a
+	// brand in brands carry that brand, other shops BrandOther.
+	FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands BrandSet) (places []dto.NearbyPlaceItem, err error)
 }
 
 var (
@@ -127,7 +128,7 @@ func NewOverpassClient(env env.Provider) IOverpassClient {
 	return c
 }
 
-func (c *OverpassClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int) (places []dto.NearbyPlaceItem, err error) {
+func (c *OverpassClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands BrandSet) (places []dto.NearbyPlaceItem, err error) {
 	ctx, span := placesTracer.Start(ctx, "OverpassClient.FetchArea")
 	defer span.End()
 
@@ -135,7 +136,7 @@ func (c *OverpassClient) FetchArea(ctx context.Context, lat float64, lng float64
 	defer cancel()
 
 	form := url.Values{}
-	form.Set("data", OverpassAreaQuery(lat, lng, radiusM))
+	form.Set("data", OverpassAreaQuery(lat, lng, radiusM, brands))
 	body := form.Encode()
 
 	lastErr := "no server tried"
@@ -153,7 +154,7 @@ func (c *OverpassClient) FetchArea(ctx context.Context, lat float64, lng float64
 		if left < per {
 			per = left
 		}
-		places, err = c.try(ctx, server, body, per, lat, lng, radiusM)
+		places, err = c.try(ctx, server, body, per, lat, lng, radiusM, brands)
 		if err == nil {
 			span.SetAttributes(attribute.Int("overpass.server", i), attribute.Int("overpass.count", len(places)))
 			return places, nil
@@ -166,7 +167,7 @@ func (c *OverpassClient) FetchArea(ctx context.Context, lat float64, lng float64
 }
 
 // try asks one server; any error = try the next one.
-func (c *OverpassClient) try(ctx context.Context, server string, body string, timeout time.Duration, lat float64, lng float64, radiusM int) ([]dto.NearbyPlaceItem, error) {
+func (c *OverpassClient) try(ctx context.Context, server string, body string, timeout time.Duration, lat float64, lng float64, radiusM int, brands BrandSet) ([]dto.NearbyPlaceItem, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -198,5 +199,5 @@ func (c *OverpassClient) try(ctx context.Context, server string, body string, ti
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
-	return ParseOverpassArea(raw, lat, lng, radiusM)
+	return ParseOverpassArea(raw, lat, lng, radiusM, brands)
 }

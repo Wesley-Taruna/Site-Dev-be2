@@ -31,13 +31,13 @@ func (_m *IPlacesClient) Configured() bool {
 	return r0
 }
 
-// CallsPerArea provides a mock function with given fields:
-func (_m *IPlacesClient) CallsPerArea() int {
-	ret := _m.Called()
+// CallsPerArea provides a mock function with given fields: brands
+func (_m *IPlacesClient) CallsPerArea(brands client.BrandSet) int {
+	ret := _m.Called(brands)
 
 	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(client.BrandSet) int); ok {
+		r0 = rf(brands)
 	} else if ret.Get(0) != nil {
 		r0 = ret.Get(0).(int)
 	}
@@ -45,14 +45,14 @@ func (_m *IPlacesClient) CallsPerArea() int {
 	return r0
 }
 
-// FetchArea provides a mock function with given fields: ctx, lat, lng, radiusM, takeCall
-func (_m *IPlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, takeCall func(ctx context.Context) error) (client.
+// FetchArea provides a mock function with given fields: ctx, lat, lng, radiusM, brands, takeCall
+func (_m *IPlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands client.BrandSet, takeCall func(ctx context.Context) error) (client.
 	PlacesArea, error) {
-	ret := _m.Called(ctx, lat, lng, radiusM, takeCall)
+	ret := _m.Called(ctx, lat, lng, radiusM, brands, takeCall)
 
-	if rf, ok := ret.Get(0).(func(context.Context, float64, float64, int, func(ctx context.Context) error) (client.
+	if rf, ok := ret.Get(0).(func(context.Context, float64, float64, int, client.BrandSet, func(ctx context.Context) error) (client.
 		PlacesArea, error)); ok {
-		return rf(ctx, lat, lng, radiusM, takeCall)
+		return rf(ctx, lat, lng, radiusM, brands, takeCall)
 	}
 
 	return ret.Get(0).(client.

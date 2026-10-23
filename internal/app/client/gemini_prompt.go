@@ -528,7 +528,7 @@ func NearbySourceLabel(source string) string {
 const NearbyExamplesPerGroup = 5
 
 var nearbyCategoryAI = map[string]string{
-	constants.NearbyCategoryCompetitor: "Minimarket pesaing (rantai bermerek)",
+	constants.NearbyCategoryCompetitor: "Pesaing bermerek (minimarket dan kedai kopi)",
 	constants.NearbyCategoryOffice:     "Kantor",
 	constants.NearbyCategorySchool:     "Sekolah (TK sampai SMA/SMK)",
 	constants.NearbyCategoryUniversity: "Kampus (universitas/akademi)",

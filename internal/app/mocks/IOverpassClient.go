@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"site-dev-backend/internal/app/client"
 	dto "site-dev-backend/internal/app/dto"
 
 	"github.com/stretchr/testify/mock"
@@ -17,12 +18,12 @@ type IOverpassClient struct {
 	mock.Mock
 }
 
-// FetchArea provides a mock function with given fields: ctx, lat, lng, radiusM
-func (_m *IOverpassClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int) ([]dto.NearbyPlaceItem, error) {
-	ret := _m.Called(ctx, lat, lng, radiusM)
+// FetchArea provides a mock function with given fields: ctx, lat, lng, radiusM, brands
+func (_m *IOverpassClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands client.BrandSet) ([]dto.NearbyPlaceItem, error) {
+	ret := _m.Called(ctx, lat, lng, radiusM, brands)
 
-	if rf, ok := ret.Get(0).(func(context.Context, float64, float64, int) ([]dto.NearbyPlaceItem, error)); ok {
-		return rf(ctx, lat, lng, radiusM)
+	if rf, ok := ret.Get(0).(func(context.Context, float64, float64, int, client.BrandSet) ([]dto.NearbyPlaceItem, error)); ok {
+		return rf(ctx, lat, lng, radiusM, brands)
 	}
 
 	var r0 []dto.NearbyPlaceItem

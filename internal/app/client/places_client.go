@@ -56,11 +56,12 @@ type IPlacesClient interface {
 	// Configured: a key is set (places.google_apikey).
 	Configured() bool
 	// CallsPerArea is how many Google calls one new area needs with the
-	// categories switched on (places.categories).
-	CallsPerArea() int
+	// categories switched on (places.categories) and these brands (one
+	// Text Search per brand with a query).
+	CallsPerArea(brands BrandSet) int
 	// FetchArea fetches every category within radiusM; takeCall is called
 	// before each Google call (daily cap) and its error stops the fetch.
-	FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, takeCall func(ctx context.Context) error) (area PlacesArea, err error)
+	FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands BrandSet, takeCall func(ctx context.Context) error) (area PlacesArea, err error)
 }
 
 // DefaultNearbyCategories are the groups searched when places.categories
@@ -105,10 +106,6 @@ const (
 	placesMaxBody = 5 << 20
 )
 
-// placesBrandQueries: one Text Search per chain (API Lab "Current code",
-// src/lib/server/area.ts 5289ab2).
-var placesBrandQueries = []string{"Indomaret", "Alfamart", "Alfamidi", "Lawson", "Circle K"}
-
 // placesNearbyTypes: one Nearby Search per non-competitor category.
 var placesNearbyTypes = map[string][]string{
 	constants.NearbyCategoryOffice:     {"corporate_office"},
@@ -146,10 +143,10 @@ func NewPlacesClient(env env.Provider) IPlacesClient {
 
 func (c *PlacesClient) Configured() bool { return c.apiKey != "" }
 
-func (c *PlacesClient) CallsPerArea() int {
+func (c *PlacesClient) CallsPerArea(brands BrandSet) int {
 	n := 0
 	for _, cat := range c.categories {
-		n += len(c.searches(cat, 0, 0, 0))
+		n += len(c.searches(cat, 0, 0, 0, brands))
 	}
 	return n
 }
@@ -169,13 +166,15 @@ func placesCircle(lat float64, lng float64, radiusM int) map[string]interface{} 
 	}}
 }
 
-// searches are the calls of one category (API Lab "Current code"):
-// competitors = 5 brand Text Searches (locationBias circle + DISTANCE: the
-// 20 nearest stores of the brand in distance order; a rectangle
+// searches are the calls of one category (API Lab "Current code" + the
+// sheet plan's coffee chains, Wes 23 Oct): competitors = one Text Search
+// per brand with a query (7 by default: Indomaret, Alfamart, Alfamidi,
+// Lawson, Circle K, Kopi Kenangan, Tomoro Coffee; locationBias circle +
+// DISTANCE: the 20 nearest of the brand in distance order; a rectangle
 // restriction gave relevance-trimmed lists) + 1 Nearby convenience_store
-// (other chains: 7-Eleven, K3 Mart, …; unbranded kept as BrandOther, never
-// counted); every other category = 1 Nearby Search.
-func (c *PlacesClient) searches(cat string, lat float64, lng float64, radiusM int) []placeSearch {
+// (brands without a query, e.g. K3 Mart; other chains and unbranded kept
+// as BrandOther, never counted); every other category = 1 Nearby Search.
+func (c *PlacesClient) searches(cat string, lat float64, lng float64, radiusM int, brands BrandSet) []placeSearch {
 	shop := func(p dto.NearbyPlaceItem, primaryType string) bool {
 		return !IsNotAShop(p.Name) && !IsNotAShopType(primaryType) && !IsFamilyMart(p.Name)
 	}
@@ -201,16 +200,17 @@ func (c *PlacesClient) searches(cat string, lat float64, lng float64, radiusM in
 		})}
 	}
 
-	out := make([]placeSearch, 0, len(placesBrandQueries)+1)
-	for _, brand := range placesBrandQueries {
-		want := brand
+	searched := brands.Searched()
+	out := make([]placeSearch, 0, len(searched)+1)
+	for _, brand := range searched {
+		want := brand.Name
 		out = append(out, placeSearch{endpoint: "searchText", body: map[string]interface{}{
-			"textQuery":      want,
+			"textQuery":      brand.Query,
 			"pageSize":       placesMaxResults,
 			"rankPreference": "DISTANCE",
 			"locationBias":   placesCircle(lat, lng, radiusM),
 		}, keep: func(p dto.NearbyPlaceItem, primaryType string) *dto.NearbyPlaceItem {
-			if BrandOf(p.Name) != want || !shop(p, primaryType) {
+			if brands.Of(p.Name) != want || !shop(p, primaryType) {
 				return nil
 			}
 			p.Brand = want
@@ -221,7 +221,7 @@ func (c *PlacesClient) searches(cat string, lat float64, lng float64, radiusM in
 		if !shop(p, primaryType) {
 			return nil
 		}
-		p.Brand = BrandOf(p.Name)
+		p.Brand = brands.Of(p.Name)
 		if p.Brand == "" {
 			p.Brand = BrandOther
 		}
@@ -403,10 +403,10 @@ func fatalPlacesErr(err error) bool {
 }
 
 // FetchArea: the office call first and alone (a refused key wastes 1
-// call, not 7), then the other categories in parallel, the calls of one
+// call, not 9), then the other categories in parallel, the calls of one
 // category one after the other. A failed first category, a refused key or
 // the daily cap fails the whole area; other failures go to Failed.
-func (c *PlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, takeCall func(ctx context.Context) error) (area PlacesArea, err error) {
+func (c *PlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, radiusM int, brands BrandSet, takeCall func(ctx context.Context) error) (area PlacesArea, err error) {
 	ctx, span := placesTracer.Start(ctx, "PlacesClient.FetchArea")
 	defer span.End()
 
@@ -418,7 +418,7 @@ func (c *PlacesClient) FetchArea(ctx context.Context, lat float64, lng float64, 
 	calls := 0
 	runCategory := func(ctx context.Context, cat string) ([]subResult, error) {
 		var subs []subResult
-		for _, s := range c.searches(cat, lat, lng, radiusM) {
+		for _, s := range c.searches(cat, lat, lng, radiusM, brands) {
 			if takeCall != nil {
 				if err := takeCall(ctx); err != nil {
 					if errors.Is(err, ErrPlacesDailyCap) {

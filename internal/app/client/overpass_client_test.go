@@ -41,11 +41,11 @@ func TestOverpassFetchArea_NextServerWhenBusy(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		form, err := url.ParseQuery(string(raw))
 		require.NoError(t, err)
-		assert.Equal(t, OverpassAreaQuery(dagoLat, dagoLng, 620), form.Get("data"), "only the query (coordinates) is sent")
+		assert.Equal(t, OverpassAreaQuery(dagoLat, dagoLng, 620, DefaultBrandSet()), form.Get("data"), "only the query (coordinates) is sent")
 		return answer(200, fixture(t, "overpass_dago.json"))
 	}, "https://busy.example.test/api/interpreter", "https://ok.example.test/api/interpreter")
 
-	places, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620)
+	places, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet())
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"busy.example.test", "ok.example.test"}, hosts)
@@ -65,7 +65,7 @@ func TestOverpassFetchArea_AllFail(t *testing.T) {
 	}, "https://slow.example.test/i", "https://junk.example.test/i", "https://down.example.test/i")
 	c.perServer = 50 * time.Millisecond
 
-	_, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620)
+	_, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet())
 
 	assert.ErrorIs(t, err, ErrOverpassUnavailable)
 	assert.Contains(t, err.Error(), "connection refused")

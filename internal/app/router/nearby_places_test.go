@@ -85,8 +85,8 @@ func placesOn(t *testing.T) *mocks.IOverpassClient {
 	withClients(t, func(c *client.Clients) { c.Overpass = osm })
 	raw, err := os.ReadFile("../client/testdata/overpass_dago.json")
 	require.NoError(t, err)
-	osm.On("FetchArea", mock.Anything, -6.886, 107.613, 620).Return(func(_ context.Context, lat, lng float64, r int) ([]dto.NearbyPlaceItem, error) {
-		return client.ParseOverpassArea(raw, lat, lng, r)
+	osm.On("FetchArea", mock.Anything, -6.886, 107.613, 620, mock.Anything).Return(func(_ context.Context, lat, lng float64, r int, brands client.BrandSet) ([]dto.NearbyPlaceItem, error) {
+		return client.ParseOverpassArea(raw, lat, lng, r, brands)
 	})
 	return osm
 }
@@ -119,7 +119,7 @@ func TestNearbyPlaces(t *testing.T) {
 	assert.Equal(t, &oldNearestStoreResp{Name: "Dago Atas", Code: "3001", DistanceM: 445, Within1Km: 1}, want.NearestFamilyMart)
 	assert.Equal(t, 3, want.Categories["competitor"].Count)
 	assert.Equal(t, "Indomaret Fresh Dago", want.Places[0].Name)
-	assert.Equal(t, 6*time.Hour, redis.TTL("site-dev-api:test:cache:nearby_area:v2:competitor+office+school+university+apartment:-6.886,107.613:500:"), "OSM fallback cached 6 h")
+	assert.Equal(t, 6*time.Hour, redis.TTL("site-dev-api:test:cache:nearby_area:v3:competitor+office+school+university+apartment:b"+client.DefaultBrandSet().Key()+":-6.886,107.613:500:"), "OSM fallback cached 6 h")
 
 	code, body = call(t, h, http.MethodGet, "/v1/site/nearby-places?lat=-6.886&lng=107.613", nil, 1001)
 	require.Equal(t, http.StatusOK, code)

@@ -1,0 +1,56 @@
+{
+ "_fixture": "Fixture shaped like a Places API (New) answer (made-up ids, names and points around Bandung Dago; no live call)",
+ "places": [
+  {
+   "id": "TEST_tm_1",
+   "displayName": {
+    "text": "TOMORO COFFEE - Dipatiukur",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8842,
+    "longitude": 107.6136
+   },
+   "types": [
+    "coffee_shop",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "coffee_shop"
+  },
+  {
+   "id": "TEST_tm_2",
+   "displayName": {
+    "text": "Kopi Kenangan Dago Atas",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.885,
+    "longitude": 107.6122
+   },
+   "types": [
+    "coffee_shop",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "coffee_shop"
+  },
+  {
+   "id": "TEST_tm_3",
+   "displayName": {
+    "text": "Tomoro Coffee Kantor Pusat",
+    "languageCode": "id"
+   },
+   "location": {
+    "latitude": -6.8861,
+    "longitude": 107.6127
+   },
+   "types": [
+    "corporate_office",
+    "point_of_interest",
+    "establishment"
+   ],
+   "primaryType": "corporate_office"
+  }
+ ]
+}

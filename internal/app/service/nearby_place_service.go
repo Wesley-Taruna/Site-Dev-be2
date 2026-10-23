@@ -29,10 +29,13 @@ import (
 // otherwise (or when Google refuses or the daily cap is near) OpenStreetMap;
 // the answer always names source and radius. Cost guards: one fetch per
 // ~110 m cell, cached 7 days (OSM fallbacks 6 h); a server-wide daily cap on
-// Google calls (150; a new area needs client CallsPerArea, 7 with the
-// default categories); after a refused key Google is skipped for 1 hour.
+// Google calls (150; a new area needs client CallsPerArea, 9 with the
+// default categories and brands); after a refused key Google is skipped for 1 hour.
 // Only the categories in places.categories are searched and answered
-// (default competitor + office, API Lab demo view). Off by default
+// (default competitor + office, API Lab demo view). Competitor brands =
+// the ACTIVE CompetitorBrands rows (Wes, 23 Oct; read every 10 minutes,
+// client.DefaultBrands when the table cannot be read or has none active),
+// so switching a brand on or off is a data change. Off by default
 // ([places] enabled = false: 503, and the AI prompt stays as before).
 type INearbyPlaceService interface {
 	// GetArea is GET /v1/site/nearby-places.
@@ -101,12 +104,18 @@ const (
 	// wider and filter from the exact point
 	nearbyPadM = 120
 	// nearbyCacheVersion: change when the classification changes (v2, 22
-	// Oct: real Google/OSM clients, API Lab brand variants + ATM rule)
-	nearbyCacheVersion = "v2"
+	// Oct: real Google/OSM clients, API Lab brand variants + ATM rule; v3,
+	// 23 Oct: brands from CompetitorBrands, 7-Eleven / Lulu Mart / Yomart
+	// out, Kopi Kenangan + Tomoro Coffee in; the key also carries the
+	// brand list's fingerprint)
+	nearbyCacheVersion = "v3"
 	// googleOffFor: after Google refuses the key, skip it this long
 	googleOffFor = time.Hour
 	// storePointsTTL: how long the store list is kept in memory
 	storePointsTTL = time.Hour
+	// brandsTTL: how long the active brand list is kept in memory (a
+	// brand switched on/off is used after at most this long)
+	brandsTTL = 10 * time.Minute
 )
 
 // nearbyState is what all requests of one process share: Google switched
@@ -118,6 +127,8 @@ type nearbyState struct {
 	inflight     map[string]*inflightArea
 	stores       []storePoint
 	storesAt     time.Time
+	brands       *client.BrandSet
+	brandsAt     time.Time
 }
 
 type inflightArea struct {
@@ -134,6 +145,7 @@ type NearbyPlaceService struct {
 	opt                  opt.Options
 	RepositoryNearbyArea repository.INearbyAreaRepository
 	RepositorySite       repository.ISiteRepository
+	RepositoryBrand      repository.ICompetitorBrandRepository
 	ClientPlaces         client.IPlacesClient
 	ClientOverpass       client.IOverpassClient
 	cfg                  nearbyConfig
@@ -146,6 +158,7 @@ func NewNearbyPlaceService() INearbyPlaceService {
 		opt:                  global.Setup.Common,
 		RepositoryNearbyArea: repository.NewNearbyAreaRepository(),
 		RepositorySite:       repository.NewSiteRepository(),
+		RepositoryBrand:      repository.NewCompetitorBrandRepository(),
 		ClientPlaces:         global.Setup.Clients.Places,
 		ClientOverpass:       global.Setup.Clients.Overpass,
 		cfg:                  loadNearbyConfig(global.Setup.Common.Env),
@@ -189,9 +202,10 @@ func (s *NearbyPlaceService) area(ctx context.Context, lat float64, lng float64,
 
 	cLat := math.Round(lat*1000) / 1000
 	cLng := math.Round(lng*1000) / 1000
-	key := fmt.Sprintf("%s:%s:%.3f,%.3f:%d", nearbyCacheVersion, strings.Join(s.cfg.categories, "+"), cLat, cLng, radiusM)
+	brands := s.brandSet(ctx)
+	key := fmt.Sprintf("%s:%s:b%s:%.3f,%.3f:%d", nearbyCacheVersion, strings.Join(s.cfg.categories, "+"), brands.Key(), cLat, cLng, radiusM)
 
-	st, cached, err := s.loadArea(ctx, key, cLat, cLng, radiusM+nearbyPadM)
+	st, cached, err := s.loadArea(ctx, key, cLat, cLng, radiusM+nearbyPadM, brands)
 	if err != nil {
 		return
 	}
@@ -236,7 +250,7 @@ func (s *NearbyPlaceService) Measured(ctx context.Context, lat float64, lng floa
 }
 
 // loadArea: cache, else one fetch per key at a time.
-func (s *NearbyPlaceService) loadArea(ctx context.Context, key string, lat float64, lng float64, fetchR int) (*storedArea, bool, error) {
+func (s *NearbyPlaceService) loadArea(ctx context.Context, key string, lat float64, lng float64, fetchR int, brands client.BrandSet) (*storedArea, bool, error) {
 	if raw, ok := s.RepositoryNearbyArea.GetArea(ctx, key); ok {
 		var st storedArea
 		if json.Unmarshal(raw, &st) == nil {
@@ -258,7 +272,7 @@ func (s *NearbyPlaceService) loadArea(ctx context.Context, key string, lat float
 	s.state.inflight[key] = f
 	s.state.mu.Unlock()
 
-	f.val, f.err = s.build(ctx, lat, lng, fetchR)
+	f.val, f.err = s.build(ctx, lat, lng, fetchR, brands)
 	s.state.mu.Lock()
 	delete(s.state.inflight, key)
 	s.state.mu.Unlock()
@@ -278,7 +292,7 @@ func (s *NearbyPlaceService) loadArea(ctx context.Context, key string, lat float
 }
 
 // googleUsable: a key, not refused within the last hour, enough calls left.
-func (s *NearbyPlaceService) googleUsable(ctx context.Context) (bool, string) {
+func (s *NearbyPlaceService) googleUsable(ctx context.Context, brands client.BrandSet) (bool, string) {
 	if !s.ClientPlaces.Configured() {
 		return false, "Kunci Google Places belum diisi di server ini"
 	}
@@ -288,19 +302,19 @@ func (s *NearbyPlaceService) googleUsable(ctx context.Context) (bool, string) {
 	if !off.IsZero() && s.now().Before(off.Add(googleOffFor)) {
 		return false, reason
 	}
-	if s.RepositoryNearbyArea.GoogleCallsLeft(ctx, s.cfg.dailyCap) < int64(s.ClientPlaces.CallsPerArea()) {
+	if s.RepositoryNearbyArea.GoogleCallsLeft(ctx, s.cfg.dailyCap) < int64(s.ClientPlaces.CallsPerArea(brands)) {
 		return false, "Batas harian panggilan Google hampir habis"
 	}
 	return true, ""
 }
 
 // build fetches one area: Google first when usable, else OpenStreetMap.
-func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64, fetchR int) (*storedArea, error) {
+func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64, fetchR int, brands client.BrandSet) (*storedArea, error) {
 	st := &storedArea{FetchedAtUnix: s.now().Unix(), Lat: lat, Lng: lng, FetchRadiusM: fetchR}
 
-	usable, reason := s.googleUsable(ctx)
+	usable, reason := s.googleUsable(ctx, brands)
 	if usable {
-		ga, err := s.ClientPlaces.FetchArea(ctx, lat, lng, fetchR, func(ctx context.Context) error {
+		ga, err := s.ClientPlaces.FetchArea(ctx, lat, lng, fetchR, brands, func(ctx context.Context) error {
 			if err := s.RepositoryNearbyArea.TakeGoogleCall(ctx, s.cfg.dailyCap); err != nil {
 				if errors.Is(err, repository.ErrNearbyDailyCap) {
 					return client.ErrPlacesDailyCap
@@ -318,7 +332,7 @@ func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64
 				st.Categories = map[string]dto.NearbyCategoryInfo{}
 			}
 			if len(ga.Failed) > 0 {
-				s.fillFromOSM(ctx, st, ga.Failed)
+				s.fillFromOSM(ctx, st, ga.Failed, brands)
 			}
 			return st, nil
 		}
@@ -337,7 +351,7 @@ func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64
 		s.opt.Logger.AddMessage(log.ErrorLevel, fmt.Errorf("nearby_place_service: google not used (%s): %w", reason, err)).Print()
 	}
 
-	places, err := s.ClientOverpass.FetchArea(ctx, lat, lng, fetchR)
+	places, err := s.ClientOverpass.FetchArea(ctx, lat, lng, fetchR, brands)
 	if err != nil {
 		s.opt.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return nil, echo.NewHTTPError(http.StatusBadGateway, "Data peta (OpenStreetMap) tidak bisa diambil sekarang. Coba lagi sebentar lagi.")
@@ -363,8 +377,8 @@ func (s *NearbyPlaceService) build(ctx context.Context, lat float64, lng float64
 
 // fillFromOSM replaces the Google categories that failed with OSM data
 // (source "mixed", labelled per category).
-func (s *NearbyPlaceService) fillFromOSM(ctx context.Context, st *storedArea, failed []string) {
-	osm, err := s.ClientOverpass.FetchArea(ctx, st.Lat, st.Lng, st.FetchRadiusM)
+func (s *NearbyPlaceService) fillFromOSM(ctx context.Context, st *storedArea, failed []string, brands client.BrandSet) {
+	osm, err := s.ClientOverpass.FetchArea(ctx, st.Lat, st.Lng, st.FetchRadiusM, brands)
 	if err != nil {
 		for _, c := range failed {
 			zero := 0
@@ -408,6 +422,69 @@ func (s *NearbyPlaceService) storePoints(ctx context.Context) ([]storePoint, err
 	s.state.stores, s.state.storesAt = points, s.now()
 	s.state.mu.Unlock()
 	return points, nil
+}
+
+// brandSet is the ACTIVE CompetitorBrands rows in Sort order, kept in
+// memory for brandsTTL; the table unreadable (e.g. not created yet, plan
+// §8) or without an active row = client.DefaultBrands, logged, and asked
+// again after brandsTTL.
+func (s *NearbyPlaceService) brandSet(ctx context.Context) client.BrandSet {
+	s.state.mu.Lock()
+	if s.state.brands != nil && s.now().Sub(s.state.brandsAt) < brandsTTL {
+		v := *s.state.brands
+		s.state.mu.Unlock()
+		return v
+	}
+	s.state.mu.Unlock()
+
+	set, why := s.readBrands(ctx)
+	if why != "" {
+		s.opt.Logger.AddMessage(log.ErrorLevel, fmt.Errorf("nearby_place_service: competitor brands from code (client.DefaultBrands): %s", why)).Print()
+		set = client.DefaultBrandSet()
+	}
+
+	s.state.mu.Lock()
+	s.state.brands, s.state.brandsAt = &set, s.now()
+	s.state.mu.Unlock()
+	return set
+}
+
+// readBrands: the active rows compiled; why != "" = use the defaults.
+func (s *NearbyPlaceService) readBrands(ctx context.Context) (set client.BrandSet, why string) {
+	if s.RepositoryBrand == nil {
+		return set, "no brand repository"
+	}
+	rows, err := s.RepositoryBrand.Get(ctx)
+	if err != nil {
+		return set, "CompetitorBrands unreadable: " + err.Error()
+	}
+	var list []client.Brand
+	for _, r := range rows {
+		if r == nil || !r.Active {
+			continue
+		}
+		var patterns []string
+		if r.Patterns != "" {
+			if err := json.Unmarshal([]byte(r.Patterns), &patterns); err != nil {
+				s.opt.Logger.AddMessage(log.ErrorLevel, fmt.Errorf("competitor brand %s: patterns are not a JSON list, name used: %w", r.Slug, err)).Print()
+				patterns = nil
+			}
+		}
+		list = append(list, client.Brand{Name: r.Name, Query: r.SearchQuery, Patterns: patterns})
+	}
+	set, errs := client.NewBrandSet(list)
+	for _, e := range errs {
+		s.opt.Logger.AddMessage(log.ErrorLevel, e).Print()
+	}
+	if set.Len() == 0 {
+		return set, "no active brand in CompetitorBrands"
+	}
+	if len(set.Searched()) == 0 {
+		// an old table without the SearchQuery column (plan §8) would
+		// otherwise silently drop every brand search
+		return set, "no active brand has a SearchQuery"
+	}
+	return set, ""
 }
 
 // insightDataSource labels which map data went into the prompt.

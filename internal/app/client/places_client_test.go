@@ -67,6 +67,10 @@ func (f *fakeGoogle) RoundTrip(r *http.Request) (*http.Response, error) {
 			name = fixture(f.t, "places_text_indomaret.json")
 		case "Alfamart":
 			name = fixture(f.t, "places_text_alfamart.json")
+		case "Kopi Kenangan":
+			name = fixture(f.t, "places_text_kopi_kenangan.json")
+		case "Tomoro Coffee":
+			name = fixture(f.t, "places_text_tomoro.json")
 		}
 	case "searchNearby":
 		switch c.body["includedTypes"].([]interface{})[0] {
@@ -110,13 +114,13 @@ func TestPlacesFetchArea_DefaultCategories(t *testing.T) {
 	c, g := placesClient(t)
 	taken := 0
 
-	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, func(context.Context) error { taken++; return nil })
+	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), func(context.Context) error { taken++; return nil })
 
 	require.NoError(t, err)
-	assert.Equal(t, 7, c.CallsPerArea())
-	assert.Equal(t, 7, area.Calls)
-	assert.Equal(t, 7, taken, "every call goes through the daily cap")
-	require.Len(t, g.calls, 7)
+	assert.Equal(t, 9, c.CallsPerArea(DefaultBrandSet()), "7 brand Text Searches + convenience_store + office (Wes, 23 Oct)")
+	assert.Equal(t, 9, area.Calls)
+	assert.Equal(t, 9, taken, "every call goes through the daily cap")
+	require.Len(t, g.calls, 9)
 
 	// office first and alone (a refused key wastes 1 call)
 	first := g.calls[0]
@@ -146,7 +150,7 @@ func TestPlacesFetchArea_DefaultCategories(t *testing.T) {
 		}
 	}
 	sort.Strings(queries)
-	assert.Equal(t, []string{"Alfamart", "Alfamidi", "Circle K", "Indomaret", "Lawson"}, queries)
+	assert.Equal(t, []string{"Alfamart", "Alfamidi", "Circle K", "Indomaret", "Kopi Kenangan", "Lawson", "Tomoro Coffee"}, queries, "no 7-Eleven, Lulu Mart, Yomart search")
 
 	var competitors []dto.NearbyPlaceItem
 	for _, p := range area.Places {
@@ -157,20 +161,23 @@ func TestPlacesFetchArea_DefaultCategories(t *testing.T) {
 		assert.Equal(t, "g:"+p.PlaceID, p.ID)
 		assert.NotContains(t, p.Name, "FamilyMart")
 	}
-	// ATM, warehouse, FamilyMart, other brand, outside the circle: dropped;
-	// "Indomart" / "Alfa Expres" spellings kept; the Indomaret found twice
-	// (brand search + convenience_store) counts once
+	// ATM, warehouse, FamilyMart, office, other brand, outside the circle:
+	// dropped; "Indomart" / "Alfa Expres" / "TOMORO COFFEE" spellings kept;
+	// the Indomaret found twice (brand search + convenience_store) counts
+	// once; 7-Eleven is no brand any more (23 Oct) = Lainnya, not counted
 	assert.Equal(t, []string{
-		"competitor|7-Eleven|7-Eleven Dago",
 		"competitor|Alfamart|Alfa Expres Dago",
 		"competitor|Alfamart|Alfamart Dipatiukur",
 		"competitor|Indomaret|Indomaret Dago Atas",
 		"competitor|Indomaret|Indomart Simpang",
+		"competitor|Kopi Kenangan|Kopi Kenangan - Dago",
+		"competitor|Lainnya|7-Eleven Dago",
 		"competitor|Lainnya|Toko Sumber Rejeki",
+		"competitor|Tomoro Coffee|TOMORO COFFEE - Dipatiukur",
 	}, names(competitors))
 
 	assert.Equal(t, []string{"competitor", "office"}, keys(area.Categories))
-	assert.Equal(t, dto.NearbyCategoryInfo{Count: 6, Source: "google"}, area.Categories["competitor"], "Indomaret: next page offered but the farthest answer is outside, so complete")
+	assert.Equal(t, dto.NearbyCategoryInfo{Count: 8, Source: "google"}, area.Categories["competitor"], "Indomaret: next page offered but the farthest answer is outside, so complete")
 	office := area.Categories["office"]
 	assert.Equal(t, 19, office.Count)
 	assert.True(t, office.Capped, "20 answers = Google's limit")
@@ -194,7 +201,7 @@ func TestPlacesFetchArea_DeniedOnFirstCall(t *testing.T) {
 		return 403, fixture(t, "places_denied_service_disabled.json"), true
 	}
 
-	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, nil)
+	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), nil)
 
 	var denied *PlacesDeniedError
 	require.True(t, errors.As(err, &denied))
@@ -214,7 +221,7 @@ func TestPlacesFetchArea_BlockedKeyLaterIsFatal(t *testing.T) {
 		return 0, "", false
 	}
 
-	_, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, nil)
+	_, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), nil)
 
 	var denied *PlacesDeniedError
 	require.True(t, errors.As(err, &denied))
@@ -223,7 +230,7 @@ func TestPlacesFetchArea_BlockedKeyLaterIsFatal(t *testing.T) {
 
 func TestPlacesFetchArea_FailedCategoryAndFirstFailure(t *testing.T) {
 	c, g := placesClient(t, constants.NearbyCategoryCompetitor, constants.NearbyCategoryOffice, constants.NearbyCategorySchool)
-	assert.Equal(t, 8, c.CallsPerArea())
+	assert.Equal(t, 10, c.CallsPerArea(DefaultBrandSet()))
 	g.override = func(call placesCall) (int, string, bool) {
 		if types, ok := call.body["includedTypes"].([]interface{}); ok && types[0] == "school" {
 			return 500, `{"error":{"status":"INTERNAL"}}`, true
@@ -231,7 +238,7 @@ func TestPlacesFetchArea_FailedCategoryAndFirstFailure(t *testing.T) {
 		return 0, "", false
 	}
 
-	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, nil)
+	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, []string{"school"}, area.Failed, "the service fills it from OSM")
@@ -239,7 +246,7 @@ func TestPlacesFetchArea_FailedCategoryAndFirstFailure(t *testing.T) {
 
 	// the first (office) call failing fails the whole area
 	g.override = func(call placesCall) (int, string, bool) { return 503, `{"error":{"status":"UNAVAILABLE"}}`, true }
-	_, err = c.FetchArea(context.Background(), dagoLat, dagoLng, 620, nil)
+	_, err = c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "HTTP 503 UNAVAILABLE")
 }
@@ -248,7 +255,7 @@ func TestPlacesFetchArea_DailyCapStops(t *testing.T) {
 	c, g := placesClient(t)
 	n := 0
 
-	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, func(context.Context) error {
+	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, DefaultBrandSet(), func(context.Context) error {
 		n++
 		if n > 3 {
 			return ErrPlacesDailyCap
@@ -264,11 +271,50 @@ func TestPlacesFetchArea_DailyCapStops(t *testing.T) {
 func TestPlacesClient_NotConfiguredAndCategories(t *testing.T) {
 	p := NewPlacesClient(nil)
 	assert.False(t, p.Configured())
-	assert.Equal(t, 7, p.CallsPerArea())
-	_, err := p.FetchArea(context.Background(), 0, 0, 0, nil)
+	assert.Equal(t, 9, p.CallsPerArea(DefaultBrandSet()))
+	_, err := p.FetchArea(context.Background(), 0, 0, 0, DefaultBrandSet(), nil)
 	assert.ErrorIs(t, err, ErrPlacesNotSetUp)
 
 	all, _ := placesClient(t, constants.NearbyCategories...)
-	assert.Equal(t, 10, all.CallsPerArea(), "all five categories = the old 10 calls")
+	assert.Equal(t, 12, all.CallsPerArea(DefaultBrandSet()), "all five categories")
+	assert.Equal(t, 5, all.CallsPerArea(BrandSet{}), "no brand: convenience_store + 4 Nearby")
 	assert.Equal(t, DefaultNearbyCategories, NearbyCategoriesFrom(nil))
+}
+
+// The brand list is data (CompetitorBrands rows): one Text Search per brand
+// with a query, brands without one only matched (K3 Mart); a brand not in
+// the list is Lainnya.
+func TestPlacesFetchArea_BrandsFromData(t *testing.T) {
+	c, g := placesClient(t)
+	brands, errs := NewBrandSet([]Brand{
+		{Name: "Indomaret", Query: "Indomaret", Patterns: []string{`indo\s*-?\s*mare?t`}},
+		{Name: "Seven", Query: "7-Eleven", Patterns: []string{`7\s*-?\s*eleven`}},
+		{Name: "K3 Mart", Patterns: []string{`k3\s*mart`}},
+	})
+	require.Empty(t, errs)
+	assert.Equal(t, 4, c.CallsPerArea(brands))
+
+	area, err := c.FetchArea(context.Background(), dagoLat, dagoLng, 620, brands, nil)
+
+	require.NoError(t, err)
+	var queries []string
+	for _, call := range g.calls {
+		if q, ok := call.body["textQuery"].(string); ok {
+			queries = append(queries, q)
+		}
+	}
+	sort.Strings(queries)
+	assert.Equal(t, []string{"7-Eleven", "Indomaret"}, queries)
+	var competitors []dto.NearbyPlaceItem
+	for _, p := range area.Places {
+		if p.Category == constants.NearbyCategoryCompetitor {
+			competitors = append(competitors, p)
+		}
+	}
+	assert.Equal(t, []string{
+		"competitor|Indomaret|Indomaret Dago Atas",
+		"competitor|Indomaret|Indomart Simpang",
+		"competitor|Lainnya|Toko Sumber Rejeki",
+		"competitor|Seven|7-Eleven Dago",
+	}, names(competitors))
 }
