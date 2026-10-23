@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -127,13 +128,32 @@ func mapAddressComponents(components []googleGeocodeAddressComponent) dto.Revers
 		}
 	}
 
-	street := joinNonEmpty(" No. ", route, streetNumber)
+	street := streetWithNumber(route, streetNumber)
 	return dto.ReverseGeocodeResponse{
 		Address1:   joinNonEmpty(", ", street, joinNonEmpty(" ", village, sublocality)),
 		Address2:   joinNonEmpty(", ", subdistrict, city),
 		Address3:   province,
 		PostalCode: postal,
 	}
+}
+
+var (
+	// reHouseNoPrefix: Google sometimes gives the street_number with its
+	// own "No." ("No.5", "No. 5", "Nomor 5")
+	reHouseNoPrefix = regexp.MustCompile(`(?i)^\s*(no|nomor)\b\.?\s*`)
+	// reRouteHasNo: a route name that already carries the house number
+	reRouteHasNo = regexp.MustCompile(`(?i)\b(no|nomor)\b\.?\s*\d`)
+)
+
+// streetWithNumber is "route No. n", never "No. No.5" (23 Oct): the
+// number's own "No." prefix is dropped, and a route that already has
+// "No. n" is kept as it is.
+func streetWithNumber(route string, number string) string {
+	number = strings.TrimSpace(reHouseNoPrefix.ReplaceAllString(number, ""))
+	if number != "" && reRouteHasNo.MatchString(route) {
+		return route
+	}
+	return joinNonEmpty(" No. ", route, number)
 }
 
 func (g *GeocodingClient) Configured() bool { return g.apiKey != "" }

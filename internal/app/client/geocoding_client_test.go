@@ -100,3 +100,18 @@ func TestGeocodingErrors(t *testing.T) {
 	assert.EqualError(t, err, "geocoding: apikey not configured (check [geocoding] section in config)")
 }
 
+// 23 Oct: "No. No.5" when Google's street_number carries its own "No.".
+func TestStreetWithNumber(t *testing.T) {
+	for _, tc := range [][3]string{
+		{"Jalan Kemang Raya", "1", "Jalan Kemang Raya No. 1"},
+		{"Jalan Kemang Raya", "No.5", "Jalan Kemang Raya No. 5"},
+		{"Jalan Kemang Raya", "No. 5A", "Jalan Kemang Raya No. 5A"},
+		{"Jalan Kemang Raya", "nomor 12", "Jalan Kemang Raya No. 12"},
+		{"Jl. H. R. Rasuna Said No.5", "No.5", "Jl. H. R. Rasuna Said No.5"},
+		{"Jalan Kemang Raya", "", "Jalan Kemang Raya"},
+		{"", "No.5", "5"},
+		{"Jalan Nomaden", "7", "Jalan Nomaden No. 7"},
+	} {
+		assert.Equal(t, tc[2], streetWithNumber(tc[0], tc[1]), tc[0]+" | "+tc[1])
+	}
+}
