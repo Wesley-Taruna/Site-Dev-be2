@@ -70,7 +70,7 @@ func TestDuplicateCheck_Blocks(t *testing.T) {
 	results := append([]sqlfake.Result{nearbyPoints(), userRow(5005, "eko", "", "USER")}, saveResults("DRAFT")...)
 	h, _, fdb := stack(t, results...)
 
-	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng}}, 1001)
+	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng, "site_sales_area": 120.0}}, 1001)
 
 	assert.Equal(t, http.StatusConflict, code)
 	assertSameJSON(t, []byte(`{"code":409,"status":"failure","message":"Conflict","data":[{"site_id":"ST7","site_name":"Toko Lain","task_status":"WAITING_DIV_HEAD","owner_id":5005,"owner_name":"eko","lat":-6.2235,"lng":106.8095,"distance_m":111}],"errors":{"error":"DUPLICATE_NEARBY: sudah ada 1 pengajuan aktif dalam 200 m dari titik ini. Cek dulu, lalu kirim ulang dengan confirm_duplicate = true bila tetap ingin mengirim."}}`), body)
@@ -85,7 +85,7 @@ func TestDuplicateCheck_ConfirmedSendsWithHistory(t *testing.T) {
 		{Match: `INSERT INTO "ApprovalDET"`, Columns: []string{"ID"}, Rows: [][]driver.Value{{int64(31)}, {int64(32)}}}}, saveResults("DRAFT")...)
 	h, rec, _ := stack(t, results...)
 
-	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng}, "confirm_duplicate": true}, 1001)
+	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng, "site_sales_area": 120.0}, "confirm_duplicate": true}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assert.Contains(t, stableSQL(rec.sqls), `INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','DUPLICATE_CONFIRMED',1001,'Staf tetap mengirim walau ada pengajuan aktif lain dalam 200 m: ST7 Toko Lain (WAITING_DIV_HEAD, 111 m)','<time>','USER',1);`)
@@ -97,7 +97,7 @@ func TestDuplicateCheck_OffByDefault(t *testing.T) {
 	results := append([]sqlfake.Result{draftTS1, nearbyPoints(), chainResult()}, saveResults("DRAFT")...)
 	h, rec, _ := stack(t, results...)
 
-	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng}}, 1001)
+	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang", "site_lat": nLat, "site_lon": nLng, "site_sales_area": 120.0}}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	for _, s := range rec.sqls {

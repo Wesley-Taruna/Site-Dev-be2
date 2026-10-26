@@ -33,7 +33,7 @@ func TestResubmit_CountsUpAndWritesResubmit(t *testing.T) {
 	}, saveResults("REVISION")...)
 	h, rec, _ := stack(t, results...)
 
-	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang"}}, 1001)
+	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", map[string]any{"site": sendableSite()}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	sqls := stableSQL(rec.sqls)

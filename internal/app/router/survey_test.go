@@ -68,26 +68,18 @@ func TestSurvey_Validation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, code, string(body))
 }
 
-func TestSurvey_TrafficRequiredOnSubmit(t *testing.T) {
+// Traffic is optional on send too (Wes, 26 Oct): the old
+// [survey] traffic_required_on_submit switch is gone, so even a config that
+// still says true does not stop a send without vehicle_traffic_level.
+func TestSurvey_TrafficNotRequiredOnSubmit(t *testing.T) {
 	withFlow(t)
-	h, rec, _ := stack(t, saveResults("DRAFT")...)
-	send := map[string]any{"site": map[string]any{"site_id": "ST1", "site_name_1": "Toko Kemang"}, "context": surveyBody(nil)}
-
-	// default off: the current web app (no traffic field) still sends; the
-	// call goes on past the check (fails later on the fixture, not here)
-	_, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", send, 1001)
-	assert.NotContains(t, string(body), "Lalu lintas kendaraan wajib diisi")
-
 	testEnv.Set("survey.traffic_required_on_submit", true)
 	t.Cleanup(func() { testEnv.Set("survey.traffic_required_on_submit", false) })
-	h, rec, _ = stack(t, saveResults("DRAFT")...)
-	code, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", send, 1001)
-	assert.Equal(t, http.StatusBadRequest, code)
-	assert.Contains(t, string(body), "Lalu lintas kendaraan wajib diisi sebelum dikirim.")
-	assert.Len(t, rec.sqls, 1, "only the user lookup, nothing written")
+	h, _, _ := stack(t, saveResults("DRAFT")...)
+	send := map[string]any{"site": sendableSite(), "context": surveyBody(nil)}
 
-	// a draft may still be saved without it
-	code, body = call(t, h, http.MethodPost, "/v1/task/DRAFT", send, 1001)
+	// the call goes on past the checks (fails later on the fixture, not here)
+	_, body := call(t, h, http.MethodPost, "/v1/task/SUBMITED", send, 1001)
 	assert.NotContains(t, string(body), "Lalu lintas kendaraan wajib diisi")
-	_ = code
+	assert.NotContains(t, string(body), "Belum bisa dikirim")
 }

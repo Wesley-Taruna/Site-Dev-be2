@@ -1,6 +1,8 @@
 package dto
 
 import (
+	"math"
+	"strings"
 	"time"
 
 	"gitlab.com/fami-app-v2/familib/familabs/validation"
@@ -52,6 +54,63 @@ type SiteRequestUpsert struct {
 	// list and still send. Only used with nearby_request.duplicate_check =
 	// "confirm".
 	ConfirmDuplicate bool `json:"confirm_duplicate"`
+	// GenerateAI (Wes, 26 Oct): may the save start an AI analysis when no
+	// insight is sent? true = yes (queue job / direct Gemini call, limits
+	// apply), false = never, missing/null = [ai_insight]
+	// auto_generate_on_save (default true = the old rules: new site, or a
+	// draft without an insight yet).
+	GenerateAI *bool `json:"generate_ai"`
+}
+
+// Fields needed to send (SUBMITED), Wes 26 Oct: only these three; address,
+// contacts, opening date, survey (incl. traffic), competitors and photos
+// are optional. Keys as in the 400 answer's data.
+const (
+	SubmitFieldName      = "site_name_1"
+	SubmitFieldLocation  = "site_location"
+	SubmitFieldSalesArea = "site_sales_area"
+)
+
+// submitFieldLabels are the Indonesian names in the 400 message.
+var submitFieldLabels = map[string]string{
+	SubmitFieldName:      "Nama site",
+	SubmitFieldLocation:  "Lokasi (titik di peta)",
+	SubmitFieldSalesArea: "Sales Area",
+}
+
+// MissingForSubmit lists what a send still needs: a name (not only
+// spaces), a valid map point (lat -90..90, lon -180..180, not 0,0) and a
+// sales area above 0. Empty = can be sent.
+func (f SiteRequestForm) MissingForSubmit() []string {
+	missing := []string{}
+	if strings.TrimSpace(f.SiteName1) == "" {
+		missing = append(missing, SubmitFieldName)
+	}
+	if !ValidSitePoint(f.SiteLat, f.SiteLon) {
+		missing = append(missing, SubmitFieldLocation)
+	}
+	if !(f.SiteSalesArea > 0) || math.IsInf(f.SiteSalesArea, 0) {
+		missing = append(missing, SubmitFieldSalesArea)
+	}
+	return missing
+}
+
+// ValidSitePoint: a real map point (0,0 = never set).
+func ValidSitePoint(lat, lon float64) bool {
+	if math.IsNaN(lat) || math.IsNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+		return false
+	}
+	return !(lat == 0 && lon == 0)
+}
+
+// SubmitMissingMessage is the 400 text, e.g. "Belum bisa dikirim. Lengkapi
+// dulu: Lokasi (titik di peta), Sales Area."
+func SubmitMissingMessage(missing []string) string {
+	labels := make([]string, 0, len(missing))
+	for _, m := range missing {
+		labels = append(labels, submitFieldLabels[m])
+	}
+	return "Belum bisa dikirim. Lengkapi dulu: " + strings.Join(labels, ", ") + "."
 }
 
 // Validate implements validation.Request (notes at most 500 characters).

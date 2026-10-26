@@ -185,6 +185,11 @@ const (
 
 	AIInsightSiteQuotaKey = "ai_insight.site_quota"
 	AIInsightDailyCapKey  = "ai_insight.daily_cap"
+
+	// AIInsightAutoGenerateOnSaveKey (Wes, 26 Oct): true or missing = a
+	// save without insight/generate_ai starts an AI analysis by the old
+	// rules; false = only when the app sends generate_ai: true.
+	AIInsightAutoGenerateOnSaveKey = "ai_insight.auto_generate_on_save"
 )
 
 // SiteAIMetrics.MetricKey values (the fixed metric names of the Gemini

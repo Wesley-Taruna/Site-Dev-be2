@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -69,6 +72,16 @@ func (h TaskHandler) Save(c echo.Context) (err error) {
 		return ctx.Serve(familabs.ErrorInvalid("status (must be DRAFT or SUBMITED)"))
 	}
 
+	// a send needs only name, map point and sales area (Wes, 26 Oct):
+	// checked before the body rules so one 400 lists everything missing
+	// (an empty name would otherwise stop at the 422 "required" rule)
+	if status == constants.TaskStatusSubmited {
+		if missing := submitMissing(ctx.Request()); len(missing) > 0 {
+			ctx.Data(missing)
+			return ctx.Serve(echo.NewHTTPError(http.StatusBadRequest, dto.SubmitMissingMessage(missing)))
+		}
+	}
+
 	var req dto.SiteRequestUpsert
 	if err = ctx.Bind(&req); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
@@ -76,6 +89,11 @@ func (h TaskHandler) Save(c echo.Context) (err error) {
 	}
 
 	ctx.ResponseData, err = h.ServicesSite.UpsertWithStatus(ctx.Request().Context(), req, status, userIDFromContext(ctx))
+	var missingErr *service.SubmitMissingError
+	if errors.As(err, &missingErr) {
+		ctx.Data(missingErr.Missing)
+		return ctx.Serve(echo.NewHTTPError(http.StatusBadRequest, missingErr.Error()))
+	}
 	var dupErr *service.DuplicateNearbyError
 	if errors.As(err, &dupErr) {
 		// 409 with the nearby requests as data; the app shows them and may
@@ -441,3 +459,33 @@ func (h TaskHandler) ApproverNewsSeen(c echo.Context) (err error) {
 
 	return ctx.Serve(err)
 }
+
+// submitMissing reads the site part of a send body and lists the needed
+// fields that are missing; the body is put back for Bind. A body that is
+// not JSON lists nothing here (Bind answers it as before).
+func submitMissing(req *http.Request) []string {
+	if req.Body == nil {
+		return nil
+	}
+	body := req.Body
+	raw, err := io.ReadAll(io.LimitReader(body, submitBodyLimit))
+	// put back what was read; anything past the limit still follows
+	req.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(raw), body), body}
+	if err != nil || len(raw) == submitBodyLimit {
+		return nil
+	}
+	var probe struct {
+		Site dto.SiteRequestForm `json:"site"`
+	}
+	if json.Unmarshal(raw, &probe) != nil {
+		return nil
+	}
+	return probe.Site.MissingForSubmit()
+}
+
+// submitBodyLimit: the save body is site + survey + file names (photos are
+// uploaded before), far below this; a bigger body is left to Bind.
+const submitBodyLimit = 8 << 20

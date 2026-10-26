@@ -110,18 +110,60 @@ func TestMaybeGenerateAIInsight_PersistsClientInsight(t *testing.T) {
 	insight := dto.AIInsightResponseGet{OverallScore: 70}
 	m.insight.On("Persist", ctxAny, "ST1", insight, int64(1001)).Return(nil)
 
-	s.maybeGenerateAIInsight(context.Background(), "ST1", constants.TaskStatusSubmited, false, 1001, &insight)
+	s.maybeGenerateAIInsight(context.Background(), "ST1", constants.TaskStatusSubmited, false, 1001, &insight, nil)
 
 	m.insight.AssertNotCalled(t, "Generate")
 }
 
 func TestMaybeGenerateAIInsight_UpdatedSubmitSkips(t *testing.T) {
 	w, m := newTestWorkflow(t)
-	s := &SiteService{opt: testOptions(), taskService: &TaskService{workflow: w}}
+	s := &SiteService{opt: testOptions(), taskService: &TaskService{workflow: w}, autoGenerateAIOnSave: true}
 
-	s.maybeGenerateAIInsight(context.Background(), "ST1", constants.TaskStatusSubmited, true, 1001, nil)
+	s.maybeGenerateAIInsight(context.Background(), "ST1", constants.TaskStatusSubmited, true, 1001, nil, nil)
 
 	m.queue.AssertNotCalled(t, "Enabled")
+}
+
+// generate_ai (Wes, 26 Oct): false never starts AI, true always does,
+// missing follows [ai_insight] auto_generate_on_save (old rules when on).
+func TestMaybeGenerateAIInsight_GenerateAIFlag(t *testing.T) {
+	yes, no := true, false
+	for name, tc := range map[string]struct {
+		auto     bool
+		isUpdate bool
+		status   string
+		flag     *bool
+		generate bool
+	}{
+		"new send, flag false, auto on":    {true, false, constants.TaskStatusSubmited, &no, false},
+		"new draft, flag false, auto on":   {true, false, constants.TaskStatusDraft, &no, false},
+		"new send, no flag, auto off":      {false, false, constants.TaskStatusSubmited, nil, false},
+		"new send, no flag, auto on (old)": {true, false, constants.TaskStatusSubmited, nil, true},
+		"updated send, flag true":          {false, true, constants.TaskStatusSubmited, &yes, true},
+		"new send, flag true, auto off":    {false, false, constants.TaskStatusSubmited, &yes, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, m := newTestWorkflow(t)
+			s := &SiteService{opt: testOptions(), taskService: &TaskService{workflow: w}, autoGenerateAIOnSave: tc.auto}
+			if tc.generate {
+				m.queue.On("Enabled").Return(false).Once()
+				m.insight.On("Generate", ctxAny, "ST1", int64(1001)).Return(dto.AIInsightResponseGet{}, nil).Once()
+			}
+
+			s.maybeGenerateAIInsight(context.Background(), "ST1", tc.status, tc.isUpdate, 1001, nil, tc.flag)
+
+			if tc.generate {
+				m.insight.AssertCalled(t, "Generate", ctxAny, "ST1", int64(1001))
+			} else {
+				m.queue.AssertNotCalled(t, "Enabled")
+				m.insight.AssertNotCalled(t, "Generate", ctxAny, "ST1", int64(1001))
+			}
+		})
+	}
+}
+
+func TestLoadAutoGenerateAIOnSave(t *testing.T) {
+	assert.True(t, loadAutoGenerateAIOnSave(nil), "no config = as before")
 }
 
 func TestApprovalHistoryMessage_HoldRelease(t *testing.T) {

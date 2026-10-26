@@ -47,9 +47,14 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 	actorName := actor.Username
 	w := s.taskService.workflow
 
-	if status == constants.TaskStatusSubmited && s.trafficRequiredOnSubmit && (req.Context == nil || req.Context.VehicleTrafficLevel == "") {
-		err = echo.NewHTTPError(http.StatusBadRequest, "Lalu lintas kendaraan wajib diisi sebelum dikirim.")
-		return
+	// send needs only name, map point and sales area (Wes, 26 Oct); the
+	// handler answers this first with the list, kept here for any other
+	// caller. A draft stays as loose as before.
+	if status == constants.TaskStatusSubmited {
+		if missing := req.Site.MissingForSubmit(); len(missing) > 0 {
+			err = &SubmitMissingError{Missing: missing}
+			return
+		}
 	}
 	isUpdate := req.Site.SiteID != ""
 
@@ -215,7 +220,7 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 		return
 	}
 
-	s.maybeGenerateAIInsight(ctx, site.SiteID, status, isUpdate, actorID, req.Insight)
+	s.maybeGenerateAIInsight(ctx, site.SiteID, status, isUpdate, actorID, req.Insight, req.GenerateAI)
 
 	var taskDetail dto.TaskDetailResponseGet
 	if taskDetail, err = s.taskService.detail(ctx, taskID); err != nil {
@@ -246,15 +251,28 @@ func (s *SiteService) upsertWithStatus(ctx context.Context, req dto.SiteRequestU
 
 // maybeGenerateAIInsight (best effort, never fails the save):
 //   - an insight sent with the request (made by preview) is stored as is;
-//   - a new site (DRAFT or SUBMITED): generate;
-//   - an updated DRAFT without an insight yet: generate;
-//   - otherwise nothing.
-func (s *SiteService) maybeGenerateAIInsight(ctx context.Context, siteID string, status string, isUpdate bool, actorID int64, insight *dto.AIInsightResponseGet) {
+//   - generate_ai false: nothing (staff send without AI, Wes 26 Oct);
+//   - generate_ai true: generate (limits apply in the job);
+//   - generate_ai missing and [ai_insight] auto_generate_on_save off:
+//     nothing;
+//   - otherwise the old rules: a new site (DRAFT or SUBMITED) or an
+//     updated DRAFT without an insight yet: generate; else nothing.
+func (s *SiteService) maybeGenerateAIInsight(ctx context.Context, siteID string, status string, isUpdate bool, actorID int64, insight *dto.AIInsightResponseGet, generateAI *bool) {
 	w := s.taskService.workflow
 	if insight != nil {
 		if err := w.ServicesAIInsight.Persist(ctx, siteID, *insight, actorID); err != nil {
 			w.logError(fmt.Errorf("site_service: failed to persist client-provided AI insight for site %s: %w", siteID, err))
 		}
+		return
+	}
+
+	if generateAI != nil {
+		if *generateAI {
+			w.enqueueAIInsight(ctx, siteID, actorID)
+		}
+		return
+	}
+	if !s.autoGenerateAIOnSave {
 		return
 	}
 
@@ -267,4 +285,15 @@ func (s *SiteService) maybeGenerateAIInsight(ctx context.Context, siteID string,
 		return
 	}
 	w.enqueueAIInsight(ctx, siteID, actorID)
+}
+
+// SubmitMissingError: a send (SUBMITED) without one of the three needed
+// fields; the handler answers 400 with the Indonesian list and the field
+// keys as data.
+type SubmitMissingError struct {
+	Missing []string
+}
+
+func (e *SubmitMissingError) Error() string {
+	return dto.SubmitMissingMessage(e.Missing)
 }

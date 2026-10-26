@@ -6,10 +6,12 @@ import (
 	"unicode"
 
 	"site-dev-backend/global"
+	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 	"site-dev-backend/internal/app/model"
 	"site-dev-backend/internal/app/repository"
 
+	"gitlab.com/fami-app-v2/familib/familabs/env"
 	"gitlab.com/fami-app-v2/familib/familabs/log"
 	"gitlab.com/fami-app-v2/familib/familabs/opt"
 )
@@ -43,11 +45,12 @@ type SiteService struct {
 	taskService             *TaskService
 	// duplicateCheck: other requests close by on submit (local §8)
 	duplicateCheck duplicateCheckConfig
-	// trafficRequiredOnSubmit: SUBMITED needs context.vehicle_traffic_level
-	// (November scope, API-CHANGES §13.5); config [survey]
-	// traffic_required_on_submit, default false so the current web app,
-	// which does not send it, can still submit
-	trafficRequiredOnSubmit bool
+	// autoGenerateAIOnSave: a save that sends no insight and no
+	// generate_ai starts an AI analysis by the old rules (new site, or a
+	// draft without an insight yet). Config [ai_insight]
+	// auto_generate_on_save, default true (the old web app relies on it);
+	// false = AI only when the app asks (generate_ai: true), Wes 26 Oct.
+	autoGenerateAIOnSave bool
 }
 
 func NewSiteService() ISiteService {
@@ -62,8 +65,17 @@ func NewSiteService() ISiteService {
 		RepositoryTransaction:   repository.NewTransactionRepository(),
 		taskService:             newTaskService(),
 		duplicateCheck:          loadDuplicateCheckConfig(global.Setup.Common.Env),
-		trafficRequiredOnSubmit: global.Setup.Common.Env != nil && global.Setup.Common.Env.GetBool("survey.traffic_required_on_submit"),
+		autoGenerateAIOnSave:    loadAutoGenerateAIOnSave(global.Setup.Common.Env),
 	}
+}
+
+// loadAutoGenerateAIOnSave reads [ai_insight] auto_generate_on_save;
+// missing = true (as before).
+func loadAutoGenerateAIOnSave(env env.Provider) bool {
+	if env == nil || !env.IsSet(constants.AIInsightAutoGenerateOnSaveKey) {
+		return true
+	}
+	return env.GetBool(constants.AIInsightAutoGenerateOnSaveKey)
 }
 
 func (s *SiteService) GetByID(ctx context.Context, siteID string) (res dto.SiteResponseGet, err error) {

@@ -72,9 +72,10 @@ type SiteContextRequestUpsert struct {
 	ObservedDemographics   string           `json:"observed_demographics"`
 	Competitors            []CompetitorItem `json:"competitors"`
 	CustomNotes            []CustomNoteItem `json:"custom_notes"`
-	// November scope (API-CHANGES §13.5): vehicle traffic (level required
-	// on SUBMITED when [survey] traffic_required_on_submit is on), count of
-	// vehicles in minutes, notes. No observation time (dropped 21 Oct).
+	// November scope (API-CHANGES §13.5): vehicle traffic (optional, also
+	// on SUBMITED: Wes 26 Oct, only name, map point and sales area are
+	// needed to send), count of vehicles in minutes, notes. No observation
+	// time (dropped 21 Oct).
 	VehicleTrafficLevel   string `json:"vehicle_traffic_level"`
 	VehicleTrafficCount   *int   `json:"vehicle_traffic_count"`
 	VehicleTrafficMinutes *int   `json:"vehicle_traffic_minutes"`
