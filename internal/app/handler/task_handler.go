@@ -60,6 +60,7 @@ func (h *TaskHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/ai-insight/:site_id", h.AIInsight, mw.Authorized())
 	r.POST("/:status", h.Save, mw.Authorized())
 	r.POST("/:id/approve", h.Approve, mw.Authorized())
+	r.POST("/:id/cancel", h.Cancel, mw.Authorized())
 }
 
 // Save is POST /v1/task/:status (DRAFT or SUBMITED) {site, context,
@@ -149,6 +150,28 @@ func (h TaskHandler) Approve(c echo.Context) (err error) {
 	}
 
 	if err = h.ServicesTask.Approve(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx), req); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// Cancel is POST /v1/task/:id/cancel {notes?} (Wes, 26 Oct): the creator
+// cancels a request returned to them ("Batalkan pengajuan"); id = task_id
+// or site_id; the body may be empty.
+func (h TaskHandler) Cancel(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.TaskCancelRequest
+	if ctx.Request().ContentLength != 0 {
+		if err = ctx.Bind(&req); err != nil {
+			h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+			return ctx.Serve(err)
+		}
+	}
+
+	if err = h.ServicesTask.Cancel(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx), req); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
 	}

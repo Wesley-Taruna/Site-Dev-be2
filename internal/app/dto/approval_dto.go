@@ -2,6 +2,7 @@ package dto
 
 import (
 	"time"
+	"unicode/utf8"
 
 	"gitlab.com/fami-app-v2/familib/familabs/validation"
 )
@@ -51,21 +52,18 @@ type ApprovalHistoryResponseGet struct {
 }
 
 // TaskActionRequest is the body of POST /v1/task/:id/approve: decision
-// APPROVE, REJECT or REVISION, and since the November scope HOLD and
-// RELEASE (API-CHANGES §13.1); notes required for REJECT/REVISION/HOLD, at
-// most 500 characters.
+// APPROVE, REJECT ("Tolak final") or REVISION ("Tolak, bisa direvisi"),
+// and since the November scope HOLD and RELEASE (API-CHANGES §13.1).
+// Notes (catatan) at most 500 characters; required only for HOLD (Wes, 26
+// Oct: optional for REJECT and REVISION, site-dev-api required them).
 type TaskActionRequest struct {
 	Decision string `json:"decision" valid:"required|in:APPROVE,REJECT,REVISION,HOLD,RELEASE"`
 	Notes    string `json:"notes"`
 }
 
-// Validate implements validation.Request (site-dev-api: required_if and
-// max=500).
+// Validate implements validation.Request (site-dev-api: max=500).
 func (r TaskActionRequest) Validate() *validation.Output {
 	o := &validation.Output{Valid: true}
-	if (r.Decision == "REJECT" || r.Decision == "REVISION") && r.Notes == "" {
-		o.Failure("notes.required", "The notes field is required.")
-	}
 	if r.Decision == "HOLD" && r.Notes == "" {
 		o.Failure("notes.required", "Alasan Hold Status wajib diisi.")
 	}
@@ -77,6 +75,27 @@ func (r TaskActionRequest) Validate() *validation.Output {
 
 // Messages implements validation.Request.
 func (r TaskActionRequest) Messages() map[string]string {
+	return map[string]string{}
+}
+
+// TaskCancelRequest is the body of POST /v1/task/:id/cancel (Wes, 26 Oct):
+// the staff cancel a request returned to them; notes optional, at most 500
+// characters. An empty body is fine.
+type TaskCancelRequest struct {
+	Notes string `json:"notes"`
+}
+
+// Validate implements validation.Request.
+func (r TaskCancelRequest) Validate() *validation.Output {
+	o := &validation.Output{Valid: true}
+	if utf8.RuneCountInString(r.Notes) > 500 {
+		o.Failure("notes.lte", "Catatan maksimal 500 karakter.")
+	}
+	return o
+}
+
+// Messages implements validation.Request.
+func (r TaskCancelRequest) Messages() map[string]string {
 	return map[string]string{}
 }
 

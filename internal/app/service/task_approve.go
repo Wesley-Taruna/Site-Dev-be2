@@ -23,11 +23,26 @@ func approvalHistoryMessage(decision string, username string, roleName string, n
 	if roleName != "" {
 		actor = fmt.Sprintf("%s (%s)", username, roleName)
 	}
+	// notes optional for REJECT / REVISION since Wes, 26 Oct (site-dev-api
+	// always had them): without notes the "dengan catatan" part is left out
 	if decision == constants.TaskActionReject {
+		if notes == "" {
+			return fmt.Sprintf("Site di reject oleh %s", actor)
+		}
 		return fmt.Sprintf("Site di reject oleh %s dengan catatan (%s)", actor, notes)
 	}
 	if decision == constants.TaskActionRevision {
+		if notes == "" {
+			return fmt.Sprintf("Site diminta revisi oleh %s", actor)
+		}
 		return fmt.Sprintf("Site diminta revisi oleh %s dengan catatan (%s)", actor, notes)
+	}
+	// Wes, 26 Oct: the staff cancel a returned request
+	if decision == constants.TaskActionCancel {
+		if notes == "" {
+			return fmt.Sprintf("Pengajuan dibatalkan oleh %s", actor)
+		}
+		return fmt.Sprintf("Pengajuan dibatalkan oleh %s dengan catatan (%s)", actor, notes)
 	}
 	// November scope (API-CHANGES §13.1); wording is our choice
 	if decision == constants.TaskActionHold {

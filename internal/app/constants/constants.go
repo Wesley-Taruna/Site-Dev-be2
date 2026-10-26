@@ -11,7 +11,25 @@ const (
 	TaskStatusCompleted = "COMPLETED"
 	TaskStatusRejected  = "REJECTED"
 	TaskStatusRevision  = "REVISION"
+	// TaskStatusCancelled (Wes, 26 Oct): the staff cancelled a request
+	// returned to them (REVISION); closed, kept with its history
+	TaskStatusCancelled = "CANCELLED"
 )
+
+// TaskStatusRejectedGroup is the list filter value for "Ditolak" (Wes, 26
+// Oct): REVISION (back to the staff, "Tolak, bisa direvisi") + REJECTED
+// ("Tolak final", closed for good). GET /v1/task?status=REJECTED_ANY.
+const TaskStatusRejectedGroup = "REJECTED_ANY"
+
+// RejectedStatuses are the statuses of the "Ditolak" group.
+var RejectedStatuses = []string{TaskStatusRevision, TaskStatusRejected}
+
+// InactiveStatuses are the closed requests (Wes, 26 Oct): final rejected
+// and cancelled. They are kept (history, Riwayat) but count as nothing
+// active: not waiting, not in the duplicate check / other requests nearby.
+// The staff app's default list leaves them out with
+// status_not=REJECTED,CANCELLED.
+var InactiveStatuses = []string{TaskStatusRejected, TaskStatusCancelled}
 
 // TaskStatusWaiting builds the status stored while a task waits at an
 // approval level, e.g. "WAITING_DEPT_HEAD" for role "DEPT_HEAD".
@@ -49,6 +67,9 @@ const (
 	// November scope (API-CHANGES §13.3): staff send a REVISION task again
 	// (was a second SUBMIT)
 	TaskActionResubmit = "RESUBMIT"
+	// TaskActionCancel (Wes, 26 Oct): the staff cancelled a REVISION
+	// request ("Batalkan pengajuan")
+	TaskActionCancel = "CANCEL"
 )
 
 // UserFeedSeen.Feed values (November scope): the staff's Activity Log and
@@ -60,7 +81,8 @@ const (
 
 // ActivityFeedActions are the history actions shown in the Activity Log
 // (API-CHANGES §13.4; not CREATE/UPDATE/FORWARD/COMPLETE).
-var ActivityFeedActions = []string{TaskActionSubmit, TaskActionResubmit, TaskActionApprove, TaskActionRevision, TaskActionHold, TaskActionRelease, TaskActionReject}
+// + CANCEL (Wes, 26 Oct: the heads see "Dibatalkan oleh staf").
+var ActivityFeedActions = []string{TaskActionSubmit, TaskActionResubmit, TaskActionApprove, TaskActionRevision, TaskActionHold, TaskActionRelease, TaskActionReject, TaskActionCancel}
 
 // Activity filters (GET /v1/activity?filter=).
 const (
@@ -123,6 +145,10 @@ const (
 	VehicleTrafficVeryBusy = "VERY_BUSY"
 )
 
+// NotesMax: approver / staff notes (catatan) on a decision or a cancel, in
+// characters (site-dev-api max=500).
+const NotesMax = 500
+
 // Survey field limits (November scope, API-CHANGES §13.5 / §6 note), in
 // characters.
 const (
@@ -154,6 +180,8 @@ var SiteListRequestStatuses = []string{
 	// November scope (API-CHANGES §13.3): held requests are in flight too
 	TaskStatusHold(RoleDeptHead),
 	TaskStatusHold(RoleDivHead),
+	// Wes, 26 Oct: cancelled by the staff (still "all except APPROVED")
+	TaskStatusCancelled,
 }
 
 // Daily quotas (per user, per day in Asia/Jakarta). The limit is read from
@@ -227,6 +255,7 @@ const TaskActionDuplicateConfirmed = "DUPLICATE_CONFIRMED"
 // Not DRAFT (may be abandoned), not REJECTED. (Local §8 also counted
 // REJECTED_BY_DIV_HEAD, which only exists with §5, not ported.)
 // HOLD_* counts as active too (November scope, API-CHANGES §13.3).
+// CANCELLED (Wes, 26 Oct) is not active either, like REJECTED.
 var NearbyRequestExtraStatuses = []string{TaskStatusRevision, TaskStatusCompleted, TaskStatusHold(RoleDeptHead), TaskStatusHold(RoleDivHead)}
 
 // Duplicate check on submit (config nearby_request.duplicate_check).

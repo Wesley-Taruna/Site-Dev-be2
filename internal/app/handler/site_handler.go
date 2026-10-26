@@ -38,6 +38,20 @@ func (h *SiteHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/nearby-places", h.NearbyPlaces, mw.Authorized())
 	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/context", h.Context, mw.Authorized())
+	r.DELETE("/:id", h.DeleteDraft, mw.Authorized())
+}
+
+// DeleteDraft is DELETE /v1/site/:id (Wes, 26 Oct, "Hapus draft"): the
+// creator removes a draft that was never sent; id = site_id or task_id.
+func (h SiteHandler) DeleteDraft(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	if err = h.ServicesSite.DeleteDraft(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx)); err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
 }
 
 // Index is GET /v1/site: sites, filters city and region.

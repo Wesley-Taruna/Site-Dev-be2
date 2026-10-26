@@ -6,6 +6,7 @@ import (
 	"unicode"
 
 	"site-dev-backend/global"
+	"site-dev-backend/internal/app/client"
 	"site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 	"site-dev-backend/internal/app/model"
@@ -31,6 +32,10 @@ type ISiteService interface {
 	// the site, survey and attachments and its task in one transaction;
 	// SUBMITED also opens the approval round.
 	UpsertWithStatus(ctx context.Context, req dto.SiteRequestUpsert, status string, actorID int64) (res dto.SiteUpsertResponse, err error)
+	// DeleteDraft is DELETE /v1/site/:id (Wes, 26 Oct, "Hapus draft"): the
+	// creator removes a draft that was never sent, for good (403 not the
+	// creator, 409 sent once / not a draft, 404 unknown).
+	DeleteDraft(ctx context.Context, id string, actorID int64) (err error)
 }
 
 type SiteService struct {
@@ -42,7 +47,9 @@ type SiteService struct {
 	RepositoryRunningID     repository.IRunningIDRepository
 	RepositoryUser          repository.IUserRepository
 	RepositoryTransaction   repository.ITransactionRepository
-	taskService             *TaskService
+	// ClientStorage removes the photo files of a deleted draft
+	ClientStorage client.IStorageClient
+	taskService   *TaskService
 	// duplicateCheck: other requests close by on submit (local §8)
 	duplicateCheck duplicateCheckConfig
 	// autoGenerateAIOnSave: a save that sends no insight and no
@@ -63,6 +70,7 @@ func NewSiteService() ISiteService {
 		RepositoryRunningID:     repository.NewRunningIDRepository(),
 		RepositoryUser:          repository.NewUserRepository(),
 		RepositoryTransaction:   repository.NewTransactionRepository(),
+		ClientStorage:           global.Setup.Clients.Storage,
 		taskService:             newTaskService(),
 		duplicateCheck:          loadDuplicateCheckConfig(global.Setup.Common.Env),
 		autoGenerateAIOnSave:    loadAutoGenerateAIOnSave(global.Setup.Common.Env),

@@ -37,6 +37,15 @@ type ITaskRepository interface {
 	// UpdateStatus changes only the given columns (TaskStatus, UpdatedBy,
 	// UpdatedAt).
 	UpdateStatus(ctx context.Context, taskID string, updates map[string]interface{}) (err error)
+	// UpdateStatusIf is UpdateStatus only while the task is still in
+	// fromStatus; rows = 0 means someone changed it first (Wes, 26 Oct:
+	// cancel).
+	UpdateStatusIf(ctx context.Context, taskID string, fromStatus string, updates map[string]interface{}) (rows int64, err error)
+	// DeleteDraft removes a never-sent draft for good (Wes, 26 Oct, "Hapus
+	// draft"): its photos rows, survey (context, competitors, own notes),
+	// AI result (insight + its child rows), ADS row, history, task and site,
+	// in the caller's transaction.
+	DeleteDraft(ctx context.Context, siteID string, taskID string) (err error)
 	// GetActiveRequestPoints returns sites inside the box whose task is
 	// WAITING_* or one of extraStatuses (box only; the caller checks the
 	// exact distance).
@@ -256,6 +265,66 @@ func (r *TaskRepository) UpdateStatus(ctx context.Context, taskID string, update
 	if err = db.Model(new(model.Task)).Where("TaskID = ?", taskID).Updates(updates).Error; err != nil {
 		span.RecordError(err)
 		return
+	}
+
+	return
+}
+
+func (r *TaskRepository) UpdateStatusIf(ctx context.Context, taskID string, fromStatus string, updates map[string]interface{}) (rows int64, err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.UpdateStatusIf")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	result := db.Model(new(model.Task)).Where("TaskID = ? AND TaskStatus = ?", taskID, fromStatus).Updates(updates)
+	if err = result.Error; err != nil {
+		span.RecordError(err)
+		return
+	}
+	rows = result.RowsAffected
+
+	return
+}
+
+// draftDeleteSteps are the deletes of DeleteDraft, children first. The AI
+// child tables hang on SiteAIInsights.SiteAIID (deleted explicitly, whether
+// or not the database cascades).
+var draftDeleteSteps = []struct {
+	table  string
+	where  string
+	byTask bool
+}{
+	{"SiteAIMetrics", "SiteAIID IN (SELECT SiteAIID FROM SiteAIInsights WHERE SiteID = ?)", false},
+	{"SiteAIRisks", "SiteAIID IN (SELECT SiteAIID FROM SiteAIInsights WHERE SiteID = ?)", false},
+	{"SiteAIOpportunities", "SiteAIID IN (SELECT SiteAIID FROM SiteAIInsights WHERE SiteID = ?)", false},
+	{"SiteAIDataAssumptions", "SiteAIID IN (SELECT SiteAIID FROM SiteAIInsights WHERE SiteID = ?)", false},
+	{"SiteAIContextWarnings", "SiteAIID IN (SELECT SiteAIID FROM SiteAIInsights WHERE SiteID = ?)", false},
+	{"SiteAIInsights", "SiteID = ?", false},
+	{"SiteAttachments", "SiteID = ?", false},
+	{"SiteCompetitors", "SiteID = ?", false},
+	{"SiteCustomNotes", "SiteID = ?", false},
+	{"SiteContexts", "SiteID = ?", false},
+	{"SiteAds", "SiteID = ?", false},
+	{"TaskHistories", "TaskID = ?", true},
+	{"Tasks", "TaskID = ?", true},
+	{"Sites", "SiteID = ?", false},
+}
+
+func (r *TaskRepository) DeleteDraft(ctx context.Context, siteID string, taskID string) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "TaskRepository.DeleteDraft")
+	defer span.End()
+
+	db := writeDB(ctx, r.opt)
+
+	for _, step := range draftDeleteSteps {
+		arg := siteID
+		if step.byTask {
+			arg = taskID
+		}
+		if err = db.Exec("DELETE FROM "+step.table+" WHERE "+step.where, arg).Error; err != nil {
+			span.RecordError(err)
+			return
+		}
 	}
 
 	return

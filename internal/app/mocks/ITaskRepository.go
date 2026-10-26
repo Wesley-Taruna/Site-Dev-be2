@@ -180,6 +180,31 @@ func (_m *ITaskRepository) UpdateStatus(ctx context.Context, taskID string, upda
 	return r0
 }
 
+// UpdateStatusIf provides a mock function with given fields: ctx, taskID, fromStatus, updates
+func (_m *ITaskRepository) UpdateStatusIf(ctx context.Context, taskID string, fromStatus string, updates map[string]interface{}) (int64, error) {
+	ret := _m.Called(ctx, taskID, fromStatus, updates)
+
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, map[string]interface{}) (int64, error)); ok {
+		return rf(ctx, taskID, fromStatus, updates)
+	}
+
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
+// DeleteDraft provides a mock function with given fields: ctx, siteID, taskID
+func (_m *ITaskRepository) DeleteDraft(ctx context.Context, siteID string, taskID string) error {
+	ret := _m.Called(ctx, siteID, taskID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = rf(ctx, siteID, taskID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetActiveRequestPoints provides a mock function with given fields: ctx, minLat, maxLat, minLon, maxLon, extraStatuses
 func (_m *ITaskRepository) GetActiveRequestPoints(ctx context.Context, minLat float64, maxLat float64, minLon float64, maxLon float64, extraStatuses []string) ([]model.RequestPoint, error) {
 	ret := _m.Called(ctx, minLat, maxLat, minLon, maxLon, extraStatuses)

@@ -80,6 +80,20 @@ func (_m *ISiteService) UpsertWithStatus(ctx context.Context, req dto.SiteReques
 	return ret.Get(0).(dto.SiteUpsertResponse), ret.Error(1)
 }
 
+// DeleteDraft provides a mock function with given fields: ctx, id, actorID
+func (_m *ISiteService) DeleteDraft(ctx context.Context, id string, actorID int64) error {
+	ret := _m.Called(ctx, id, actorID)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64) error); ok {
+		r0 = rf(ctx, id, actorID)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // NewISiteService creates a new instance of ISiteService. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 func NewISiteService(t interface {
 	mock.TestingT

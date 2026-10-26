@@ -53,6 +53,11 @@ type ITaskService interface {
 	// decision on the level waiting for them; APPROVE moves to the next
 	// level or completes the task.
 	Approve(ctx context.Context, taskID string, actorID int64, req dto.TaskActionRequest) (err error)
+	// Cancel is POST /v1/task/:id/cancel (Wes, 26 Oct, "Batalkan
+	// pengajuan"): the creator closes a request returned to them (REVISION)
+	// as CANCELLED, optional notes (403 not the creator, 409 other status,
+	// 404 unknown).
+	Cancel(ctx context.Context, id string, actorID int64, req dto.TaskCancelRequest) (err error)
 	// GetNearbyRequests is GET /v1/task/nearby (local §8): active requests
 	// of all staff around a point, nearest first.
 	GetNearbyRequests(ctx context.Context, req dto.NearbyRequestGet) (res []dto.NearbyRequestResponseGet, err error)
@@ -130,6 +135,9 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 	if req.Status == constants.TaskStatusHoldGroup {
 		// status=HOLD = both HOLD_* (November scope, API-CHANGES §13.3)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.HoldStatuses, siteIDs, createdBy)
+	} else if req.Status == constants.TaskStatusRejectedGroup {
+		// status=REJECTED_ANY = "Ditolak": REVISION + REJECTED (Wes, 26 Oct)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.RejectedStatuses, siteIDs, createdBy)
 	} else if req.Status == "" && len(req.StatusNot) > 0 {
 		// status_not (November scope, open: review §5 #7)
 		tasks, total, err = s.RepositoryTask.GetNotInStatuses(ctx, offset, dto.TaskPageSize, orderBy, req.StatusNot, siteIDs, createdBy)

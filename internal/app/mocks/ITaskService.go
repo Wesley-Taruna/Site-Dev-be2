@@ -177,6 +177,20 @@ func (_m *ITaskService) Approve(ctx context.Context, taskID string, actorID int6
 	return r0
 }
 
+// Cancel provides a mock function with given fields: ctx, id, actorID, req
+func (_m *ITaskService) Cancel(ctx context.Context, id string, actorID int64, req dto.TaskCancelRequest) error {
+	ret := _m.Called(ctx, id, actorID, req)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, int64, dto.TaskCancelRequest) error); ok {
+		r0 = rf(ctx, id, actorID, req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // GetNearbyRequests provides a mock function with given fields: ctx, req
 func (_m *ITaskService) GetNearbyRequests(ctx context.Context, req dto.NearbyRequestGet) ([]dto.NearbyRequestResponseGet, error) {
 	ret := _m.Called(ctx, req)

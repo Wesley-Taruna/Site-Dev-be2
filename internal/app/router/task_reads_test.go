@@ -415,8 +415,9 @@ func TestSideBySide_SiteList(t *testing.T) {
 			TaskStatus: "COMPLETED", CreatedBy: 1001, UpdatedBy: 3002, CreatedAt: created, UpdatedAt: updated},
 	}, 41, 3, 0), body)
 	// site-dev-api: ('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED');
-	// November scope (API-CHANGES §13.3) adds the two HOLD_* statuses
-	statuses := `('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED','HOLD_DEPT_HEAD','HOLD_DIV_HEAD')`
+	// November scope (API-CHANGES §13.3) adds the two HOLD_* statuses, Wes
+	// 26 Oct CANCELLED (staff cancel)
+	statuses := `('DRAFT','SUBMITED','WAITING_DEPT_HEAD','WAITING_DIV_HEAD','REJECTED','REVISION','COMPLETED','HOLD_DEPT_HEAD','HOLD_DIV_HEAD','CANCELLED')`
 	assert.Equal(t, []string{
 		`SELECT "SiteID" FROM "Sites" WHERE SiteID LIKE '%kem%' OR SiteName1 LIKE '%kem%' OR SiteName2 LIKE '%kem%' OR SiteAddress1 LIKE '%kem%' OR SiteAddress2 LIKE '%kem%' OR SiteAddress3 LIKE '%kem%'`,
 		`SELECT count(*) FROM "Tasks" WHERE TaskStatus IN ` + statuses + ` AND SiteID IN ('ST1','ST2')`,

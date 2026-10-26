@@ -56,7 +56,7 @@ func TestActivity_All(t *testing.T) {
 		{"id":9,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"REVISION","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":true,"unread":true},
 		{"id":8,"task_id":"TS2","site_id":"ST2","site_name_1":"Toko Dua","task_status":"WAITING_DIV_HEAD","action":"APPROVE","actor_id":3001,"actor_name":"citra","actor_role":"DEPT_HEAD","created_at":"2026-10-03T14:15:00Z","round":1,"needs_action":false,"unread":true},
 		{"id":2,"task_id":"TS1","site_id":"ST1","site_name_1":"Toko Kemang","task_status":"REVISION","action":"SUBMIT","actor_id":1001,"actor_name":"andi","actor_role":"USER","created_at":"2026-10-01T09:00:00Z","round":1,"needs_action":true,"unread":false}],"total":3,"page":1,"per_page":10}`), body)
-	feed := `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE Tasks.CreatedBy = 1001 AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')`
+	feed := `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE Tasks.CreatedBy = 1001 AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT','CANCEL')`
 	assert.Equal(t, []string{
 		`SELECT * FROM "Users" WHERE UserID = 1001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT * FROM "UserFeedSeen" WHERE UserID = 1001 AND Feed = 'ACTIVITY' ORDER BY "UserFeedSeen"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
@@ -136,7 +136,7 @@ func waitingFor(reader string) string {
 // approverFeed is the approver Activity Log base: every request sent at
 // least once (has an ApprovalHDR round), whoever is in its chain (Wes, 23
 // Oct).
-const approverFeed = `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')`
+const approverFeed = `FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT','CANCEL')`
 
 func TestActivity_DeptHead_All(t *testing.T) {
 	h, rec, _ := stack(t, approverActivityResults(3001)...)
@@ -201,7 +201,7 @@ func TestActivity_Approver_UnreadCount(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":{"count":4}}`), body)
-	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')) AND (TaskHistories.ActorID <> 4001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
+	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (TaskHistories.TaskID IN (SELECT ApprovalHDR.TaskID FROM "ApprovalHDR") AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT','CANCEL')) AND (TaskHistories.ActorID <> 4001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
 }
 
 func TestActivity_UnreadCountAndSeen(t *testing.T) {
@@ -211,7 +211,7 @@ func TestActivity_UnreadCountAndSeen(t *testing.T) {
 	code, body := call(t, h, http.MethodGet, "/v1/activity/unread-count", nil, 1001)
 	require.Equal(t, http.StatusOK, code, string(body))
 	assertSameJSON(t, []byte(`{"code":200,"status":"success","data":{"count":4}}`), body)
-	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (Tasks.CreatedBy = 1001 AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT')) AND (TaskHistories.ActorID <> 1001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
+	assert.Equal(t, `SELECT count(*) FROM "TaskHistories" JOIN Tasks ON Tasks.TaskID = TaskHistories.TaskID WHERE (Tasks.CreatedBy = 1001 AND TaskHistories.Action IN ('SUBMIT','RESUBMIT','APPROVE','REVISION','HOLD','RELEASE','REJECT','CANCEL')) AND (TaskHistories.ActorID <> 1001 AND TaskHistories.CreatedAt > '2026-10-02 00:00:00')`, rec.sqls[2])
 
 	// first open: no row to update, so one is created
 	h, rec, _ = stack(t, userRow(1001, "andi", "", "USER"), sqlfake.Result{Match: `UPDATE "UserFeedSeen"`, Affected: sqlfake.Int64(0)})

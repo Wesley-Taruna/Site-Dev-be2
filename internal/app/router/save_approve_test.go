@@ -398,10 +398,11 @@ func TestSideBySide_ApproveRefused(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, code)
 	assertSameJSON(t, []byte(`{"code":500,"status":"failure","message":"Internal Server Error","errors":{"error":"task_service: no pending approval for this user on task TS1: record not found"}}`), body)
 
-	code, body = call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "REJECT"}, 3001)
-	// DIFFERENCE (boilerplate binder): site-dev-api 500 with go-playground text
+	// DIFFERENCE (Wes, 26 Oct): REJECT / REVISION without notes are fine
+	// now (site-dev-api: 500 "notes required"); too long notes still 422
+	code, body = call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "REJECT", "notes": strings.Repeat("x", 501)}, 3001)
 	assert.Equal(t, http.StatusUnprocessableEntity, code)
-	assert.Contains(t, string(body), `"notes":"The notes field is required."`)
+	assert.Contains(t, string(body), `"notes":"The notes may not be greater than 500"`)
 	code, _ = call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "MAYBE"}, 3001)
 	assert.Equal(t, http.StatusUnprocessableEntity, code)
 }

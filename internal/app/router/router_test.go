@@ -222,6 +222,9 @@ var extraRoutes = map[string]bool{
 	"GET /v1/portal/site/status/count": true,
 	"GET /v1/portal/site/:id/report":   true,
 	"PUT /v1/portal/site/:id/ads":      true,
+	// Wes, 26 Oct: staff delete a never-sent draft / cancel a returned request
+	"DELETE /v1/site/:id":      true,
+	"POST /v1/task/:id/cancel": true,
 }
 
 // TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends
