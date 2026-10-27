@@ -153,3 +153,20 @@ func TestPrompt_RuleIAndSchema(t *testing.T) {
 	assert.Contains(t, schema, `"scoreReason"`)
 	assert.Contains(t, schema, `"opportunityBonus"`)
 }
+
+// Live runs (27 Oct) showed Gemini writing the total into the reason; the
+// server's number wins.
+func TestFixReasonScore(t *testing.T) {
+	for in, want := range map[string]string{
+		"Skor total 64 mencerminkan potensi.":             "Skor total 61 mencerminkan potensi.",
+		"Skor keseluruhan 91 mencerminkan lokasi kuat.":   "Skor keseluruhan 61 mencerminkan lokasi kuat.",
+		"Skor akhir: 70/100 karena parkir.":               "Skor akhir: 61/100 karena parkir.",
+		"Skor keseluruhan yang rendah ini disebabkan ...": "Skor keseluruhan yang rendah ini disebabkan ...",
+		"Aksesibilitas (95) dan demografi (90) kuat.":     "Aksesibilitas (95) dan demografi (90) kuat.",
+	} {
+		assert.Equal(t, want, fixReasonScore(in, 61), in)
+	}
+	ins := dto.AIInsightResponseGet{Metrics: scoredMetrics(75, 70, 60, 78, 72, 80), Risks: risks("moderate"), ScoreReason: " Skor total 99 karena akses. "}
+	ScoreInsight(&ins, 0)
+	assert.Equal(t, "Skor total 70 karena akses.", ins.ScoreReason)
+}

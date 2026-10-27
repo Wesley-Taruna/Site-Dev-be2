@@ -3,6 +3,7 @@ package client
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"site-dev-backend/internal/app/constants"
@@ -99,7 +100,21 @@ func ScoreInsight(ins *dto.AIInsightResponseGet, opportunityBonus int) {
 	ins.ScoreBreakdown = b
 	ins.OverallScore = clampInt(b.Base-b.RiskPenalty+b.OpportunityBonus, 0, 100)
 	ins.Recommendation = Recommendation(ins.OverallScore)
-	ins.ScoreReason = strings.TrimSpace(ins.ScoreReason)
+	ins.ScoreReason = fixReasonScore(strings.TrimSpace(ins.ScoreReason), ins.OverallScore)
+}
+
+// reasonTotal finds a total score written in the reason ("Skor total 64",
+// "skor keseluruhan 91", "skor akhir: 70/100").
+var reasonTotal = regexp.MustCompile(`(?i)(skor\s+(?:total|keseluruhan|akhir)\s*(?:adalah|sebesar|yaitu)?\s*:?\s*)(\d{1,3})(\s*/\s*100)?`)
+
+// fixReasonScore: the prompt asks Gemini not to write the total (the
+// server computes it), but in the live runs (27 Oct) it often did; a
+// number there that differs from the server's is replaced by it.
+func fixReasonScore(reason string, score int) string {
+	return reasonTotal.ReplaceAllStringFunc(reason, func(m string) string {
+		p := reasonTotal.FindStringSubmatch(m)
+		return p[1] + fmt.Sprint(score) + p[3]
+	})
 }
 
 // RescoreSentInsight re-checks an insight a client sends back (preview
