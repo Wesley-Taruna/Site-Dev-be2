@@ -35,8 +35,11 @@ info:
 
     **Times (WIB).** The server runs with `TZ=Asia/Jakarta` and the database holds WIB wall-clock time.
     Timestamps come out as RFC 3339 with a `Z` at the end (as the old site-dev-api did), but the
-    digits are **WIB**: show them as they are, do **not** add 7 hours. Dates without time are
-    `YYYY-MM-DD` (`""` when empty).
+    digits are **WIB**: show them as they are, do **not** add 7 hours. Values the server has just
+    written in the same call (e.g. `site.created_at` in the save answer, `fetched_at`) carry `+07:00`
+    instead: same clock time. Dates without time are `YYYY-MM-DD` (`""` when empty).
+    Rows filled by a database default (seed data) carry the database server's own clock (checked
+    locally: UTC); the DB owner confirms the real server's time zone.
 
     **Status values (exact, keep the spelling).** Stored on a request (`task_status`): `DRAFT`,
     `WAITING_DEPT_HEAD`, `WAITING_DIV_HEAD`, `HOLD_DEPT_HEAD`, `HOLD_DIV_HEAD`, `REVISION`
@@ -463,7 +466,8 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorEnvelope'}
               examples:
-                name: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {site_name_1: The site name 1 field is required.}}}
+                name: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {site.site_name_1: The site name 1 field is required.}}}
+                survey: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {context.vehicle_traffic_minutes: The vehicle traffic minutes field is required when vehicle traffic count is present.}}}
                 notes: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {notes: The notes may not be greater than 500}}}
                 bad-status: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {'status (must be DRAFT or SUBMITED)': The status (must be DRAFT or SUBMITED) is invalid value.}}}
   /v1/task/{id}/cancel:
@@ -805,7 +809,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {site_lat: The site lat field is required.}}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {site.site_lat: The site lat field is required., site.site_lon: The site lon field is required.}}
         '429': {$ref: '#/components/responses/AILimit'}
         '502': {$ref: '#/components/responses/AIBadGateway'}
         '503': {$ref: '#/components/responses/AIOff'}
@@ -865,7 +869,12 @@ paths:
                       data: {$ref: '#/components/schemas/AIInsight'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/NoToken'}
-        '500': {$ref: '#/components/responses/RecordNotFound'}
+        '500':
+          description: No analysis for this site yet (old behaviour, a 404 would be cleaner)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 500, status: failure, message: Internal Server Error, errors: {error: 'insight for site ST20261027000001: record not found'}}
 
   # ------------------------------------------------------------------ Map / Places
   /v1/site:
@@ -2008,7 +2017,7 @@ paths:
     get:
       tags: [Health]
       summary: Health check (no login)
-      description: Answers 200 with the service name (`[app] name`) as `message`. Does not check the database.
+      description: Answers 200 with the service name (`[app] name`) as `message` (devops may set it to `site-dev-api`, plan Q13). Does not check the database or Redis.
       x-roles: [public]
       operationId: healthCheck
       security: []
@@ -2018,7 +2027,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Envelope'}
-              example: {code: 200, status: success, message: site-dev-api}
+              example: {code: 200, status: success, message: site-dev-backend}
   /v1/docs:
     get:
       tags: [Health]
@@ -2290,7 +2299,9 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-          example: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Alamat otomatis (Google Geocoding) belum diaktifkan di server ini ([geocoding] enabled = false).'}}
+          examples:
+            off: {value: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Alamat otomatis (Google Geocoding) belum diaktifkan di server ini ([geocoding] enabled = false).'}}}
+            no-key: {value: {code: 503, status: failure, message: Service Unavailable, errors: {error: Kunci Google Geocoding belum diisi di server ini (geocoding.apikey).}}}
     BasicAuthFailed:
       description: Basic auth missing or wrong (plain JSON, not the envelope)
       content:
