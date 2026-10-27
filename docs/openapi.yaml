@@ -2695,8 +2695,15 @@ components:
       properties:
         site_ai_id: {type: integer, format: int64}
         site_id: {type: string}
-        overallScore: {type: integer, description: 'round(0.18 x the 5 main metrics + 0.10 x vehicleTraffic)'}
-        recommendation: {type: string}
+        overallScore:
+          type: integer
+          description: |
+            (27 Okt) Computed by the server from ALL inputs, not taken from Gemini:
+            clamp(round(0.18 x the 5 main metrics + 0.10 x vehicleTraffic) - risk penalty + opportunity bonus, 0, 100).
+            The 6 metrics carry the survey (parking, notes, competitor note, map data); risk penalty = high 4 /
+            moderate 2 / low 1 per risk, max 10; opportunity bonus = +1 per concrete opportunity backed by the
+            survey or map data, 0-5. Insights made before 27 Oct keep Gemini's number.
+        recommendation: {type: string, description: 'from overallScore: >=82 Strongly Recommended, 70-81 Recommended, 55-69 Proceed With Caution, <55 Reconsider'}
         headline: {type: string}
         narrative: {type: string}
         metrics:
@@ -2741,6 +2748,15 @@ components:
         generatedAt: {$ref: '#/components/schemas/WibTime'}
         data_source: {type: string, enum: [gemini, gemini+google, gemini+osm, gemini+mixed], description: 'map data the AI got; only on a fresh answer while [places] is on'}
         measured: {type: object, description: 'the map data given to Gemini (counts, examples, nearest FamilyMart); only on a fresh answer'}
+        score_reason: {type: string, description: '(baru, 27 Okt) why this score: 2-4 Indonesian sentences naming the biggest plus and minus. Show it under the big score. Left out on older insights.', example: 'Nilai terbantu oleh akses yang baik dan banyak kantor tercatat dalam 500 m. Nilai tertahan oleh parkir yang terbatas dan 4 minimarket pesaing dalam 300 m.'}
+        score_breakdown:
+          type: object
+          description: (baru, 27 Okt) how overallScore was computed; left out on older insights
+          properties:
+            base: {type: integer, description: round(0.18 x 5 main metrics + 0.10 x vehicleTraffic)}
+            risk_penalty: {type: integer, description: 'high 4 / moderate 2 / low 1 per risk, max 10'}
+            opportunity_bonus: {type: integer, description: '0-5'}
+          example: {base: 75, risk_penalty: 2, opportunity_bonus: 1}
     AIQuota:
       type: object
       properties:

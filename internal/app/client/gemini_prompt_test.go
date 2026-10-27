@@ -48,7 +48,7 @@ func TestGeminiRequestAndAnswer(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &req))
 	cfg := req["generationConfig"].(map[string]any)
 	assert.Equal(t, "application/json", cfg["responseMimeType"])
-	assert.Equal(t, 0.35, cfg["temperature"])
+	assert.Equal(t, 0.2, cfg["temperature"])                // site-dev-api 0.35; lower for a steadier score (Wes, 27 Oct)
 	assert.Equal(t, float64(12000), cfg["maxOutputTokens"]) // site-dev-api 8000: cut answers on 2.5-flash (thinking counts)
 
 	answer := `{"candidates":[{"content":{"parts":[{"text":"{\"overallScore\":74,\"recommendation\":\"Recommended\",\"metrics\":{\"footTraffic\":{\"score\":80,\"factors\":[\"a\"]}},\"opportunities\":[\"x\"]}"}]}}]}`
@@ -56,7 +56,11 @@ func TestGeminiRequestAndAnswer(t *testing.T) {
 	insight, err := ParseGeminiAnswer([]byte(answer), &model.Site{SiteID: "ST1"}, now)
 	require.NoError(t, err)
 	assert.Equal(t, "ST1", insight.SiteID)
-	assert.Equal(t, 74, insight.OverallScore)
+	// DIFFERENCE (Wes, 27 Oct): the server computes the score from the
+	// metrics (only footTraffic 80 here, no vehicleTraffic: average of 5 =
+	// 16), not Gemini's 74
+	assert.Equal(t, 16, insight.OverallScore)
+	assert.Equal(t, "Reconsider", insight.Recommendation)
 	assert.Equal(t, 80, insight.Metrics.FootTraffic.Score)
 	assert.Equal(t, now, insight.GeneratedAt)
 
@@ -90,9 +94,11 @@ func TestPromptSameAsSiteDevAPI(t *testing.T) {
 // (API-CHANGES §13.5): the B1 score formula with the 6th metric and rule H
 // after rule D. Nothing else may differ.
 func novemberPrompt(old string) string {
+	// plus the 27 Oct change (Wes): B1 = score from all inputs (rule I),
+	// computed by the server; rule I after rule H
 	s := strings.Replace(old, "   1. overallScore = round(average dari 5 metrik). Tidak boleh menyimpang lebih dari 1 poin.",
-		"   1. overallScore = round(0.18 × (footTraffic + demographics + competition + accessibility + economic) + 0.10 × vehicleTraffic). Tidak boleh menyimpang lebih dari 1 poin. (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)", 1)
-	return strings.Replace(s, "\n\n============================\nOUTPUT:", "\n\n"+ruleH+"\n\n============================\nOUTPUT:", 1)
+		"   1. overallScore = round(0.18 × (footTraffic + demographics + competition + accessibility + economic) + 0.10 × vehicleTraffic) − penalti risiko + opportunityBonus, dibatasi 0-100 (aturan I). (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)", 1)
+	return strings.Replace(s, "\n\n============================\nOUTPUT:", "\n\n"+ruleH+"\n\n"+ruleI+"\n\n============================\nOUTPUT:", 1)
 }
 
 func TestPrompt_NovemberSurveyFields(t *testing.T) {

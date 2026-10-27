@@ -247,6 +247,24 @@ const (
 	ScoreWeightVehicleTraffic = "0.10"
 )
 
+// Overall score from ALL inputs (Wes, 27 Oct), computed by the server
+// (client.ScoreInsight), not taken from Gemini:
+//
+//	overall = clamp(round(0.18 × 5 metrics + 0.10 × vehicleTraffic)
+//	                − risk penalty + opportunity bonus, 0, 100)
+//
+// The 6 metrics already carry the survey (parking, notes, competitor note,
+// map data: prompt rule I). Risk penalty per risk Gemini lists: high 4,
+// moderate 2, low 1, at most 10. Opportunity bonus: Gemini's
+// opportunityBonus (+1 per concrete, input-backed opportunity), 0..5.
+const (
+	ScoreRiskPenaltyHigh     = 4
+	ScoreRiskPenaltyModerate = 2
+	ScoreRiskPenaltyLow      = 1
+	ScoreRiskPenaltyMax      = 10
+	ScoreOpportunityBonusMax = 5
+)
+
 // TaskActionDuplicateConfirmed: the staff sent although other active
 // requests are close by (local §8); the note names them.
 const TaskActionDuplicateConfirmed = "DUPLICATE_CONFIRMED"

@@ -143,7 +143,9 @@ func TestSideBySide_GenerateAIInsight(t *testing.T) {
 		`SELECT * FROM "SystemSettings" WHERE SettingKey = 'ai_insight.daily_quota' ORDER BY "SystemSettings"."ID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		oldDetailSQL[2], oldDetailSQL[5], oldDetailSQL[6], oldDetailSQL[7],
 		`DELETE FROM "SiteAIInsights" WHERE SiteID = 'ST1'`,
-		`INSERT INTO "SiteAIInsights" ("SiteID","OverallScore","Recommendation","Headline","Narrative","ConfidenceLevel","ConfidenceReason","GeminiModel","GeneratedBy","GeneratedAt","CreatedAt") OUTPUT INSERTED."SiteAIID" VALUES ('ST1',74,'Recommended','Toko Kemang — Recommended (74/100)','Layak.','medium','survey parsial','gemini-2.5-flash',1001,'<time>','<time>');`,
+		// DIFFERENCE (Wes, 27 Oct): 2 new columns, NULL for an insight
+		// without them (this mock answer has the old shape)
+		`INSERT INTO "SiteAIInsights" ("SiteID","OverallScore","Recommendation","Headline","Narrative","ConfidenceLevel","ConfidenceReason","GeminiModel","GeneratedBy","GeneratedAt","CreatedAt","ScoreReason","ScoreBreakdown") OUTPUT INSERTED."SiteAIID" VALUES ('ST1',74,'Recommended','Toko Kemang — Recommended (74/100)','Layak.','medium','survey parsial','gemini-2.5-flash',1001,'<time>','<time>',NULL,NULL);`,
 		`INSERT INTO "SiteAIMetrics" ("SiteAIID","MetricKey","Label","Score","Band","Summary","Factors","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'footTraffic','Foot',80,'good','Foot ok','a;b','<time>'),(77,'demographics','Demo',70,'good','Demo ok','a;b','<time>'),(77,'competition','Comp',60,'good','Comp ok','a;b','<time>'),(77,'accessibility','Akses',85,'good','Akses ok','a;b','<time>'),(77,'economic','Eko',75,'good','Eko ok','a;b','<time>');`,
 		`INSERT INTO "SiteAIRisks" ("SiteAIID","Title","Severity","Mitigation","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'Parkir','moderate','sewa lahan','<time>');`,
 		`INSERT INTO "SiteAIOpportunities" ("SiteAIID","Opportunity","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'kampus','<time>');`,

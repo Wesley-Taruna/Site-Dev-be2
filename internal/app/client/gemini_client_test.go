@@ -131,7 +131,9 @@ func TestGemini_OK_ScoreCardWithSixMetrics(t *testing.T) {
 }
 
 func TestParseGeminiAnswer_HeadlineBuiltHere(t *testing.T) {
-	inner := `{"overallScore":81,"recommendation":"Recommended","headline":"Ruko \\u2014 Recommended (81/100)"}`
+	// overall score from the metrics (server, Wes 27 Oct): 0.18 × 400 + 0.10 × 90 = 81
+	inner := `{"overallScore":60,"recommendation":"Reconsider","headline":"Ruko \\u2014 Recommended (81/100)",` +
+		`"metrics":{"footTraffic":{"score":80},"demographics":{"score":80},"competition":{"score":80},"accessibility":{"score":80},"economic":{"score":80},"vehicleTraffic":{"score":90}}}`
 	raw, err := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": inner}}}}}})
 	require.NoError(t, err)
 
@@ -141,7 +143,7 @@ func TestParseGeminiAnswer_HeadlineBuiltHere(t *testing.T) {
 
 	got, err = ParseGeminiAnswer(raw, &model.Site{}, time.Now())
 	require.NoError(t, err)
-	assert.Equal(t, `Ruko \u2014 Recommended (81/100)`, got.Headline, "no site name: Gemini's text")
+	assert.Equal(t, "Recommended (81/100)", got.Headline, "no site name: without it (Gemini's number may differ)")
 }
 
 func TestGemini_NoKey_NoCall(t *testing.T) {

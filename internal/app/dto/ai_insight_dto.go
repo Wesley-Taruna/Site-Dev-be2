@@ -110,6 +110,18 @@ type AIInsightMetrics struct {
 	VehicleTraffic *AIInsightMetric `json:"vehicleTraffic,omitempty"`
 }
 
+// AIScoreBreakdown is overallScore = clamp(Base − RiskPenalty +
+// OpportunityBonus, 0, 100) (constants.ScoreRiskPenalty...).
+type AIScoreBreakdown struct {
+	// Base = round(0.18 × the 5 main metrics + 0.10 × vehicleTraffic)
+	Base int `json:"base"`
+	// RiskPenalty = high 4 / moderate 2 / low 1 per risk, at most 10
+	RiskPenalty int `json:"risk_penalty"`
+	// OpportunityBonus = +1 per concrete opportunity backed by the
+	// survey or map data (Gemini), 0..5
+	OpportunityBonus int `json:"opportunity_bonus"`
+}
+
 type AIInsightCompetitor struct {
 	Name       string  `json:"name"`
 	DistanceKm float64 `json:"distanceKm"`
@@ -146,6 +158,12 @@ type AIInsightResponseGet struct {
 	DataAssumptions  []string                  `json:"dataAssumptions"`
 	ContextWarnings  []AIInsightContextWarning `json:"contextWarnings"`
 	GeneratedAt      time.Time                 `json:"generatedAt"`
+	// ScoreReason (Wes, 27 Oct): "why this score", 2-4 Indonesian
+	// sentences naming the biggest plus and minus; empty on older insights.
+	ScoreReason string `json:"score_reason,omitempty"`
+	// ScoreBreakdown (Wes, 27 Oct): how the server computed overallScore;
+	// nil on older insights.
+	ScoreBreakdown *AIScoreBreakdown `json:"score_breakdown,omitempty"`
 	// DataSource / Measured (optional, local §6): which map data the AI got
 	// ("gemini+google", "gemini+osm", "gemini+mixed", or "gemini" when the
 	// lookup failed). Only on a fresh generate/preview while [places] is

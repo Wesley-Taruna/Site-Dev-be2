@@ -22,6 +22,10 @@ type SiteAIInsight struct {
 	GeneratedBy      int64     `gorm:"column:GeneratedBy" json:"generated_by"`
 	GeneratedAt      time.Time `gorm:"column:GeneratedAt" json:"generated_at"`
 	CreatedAt        time.Time `gorm:"column:CreatedAt" json:"created_at"`
+	// Wes, 27 Oct (new columns, plan §8): "why this score" and how the
+	// server computed it (JSON of dto.AIScoreBreakdown); NULL on older rows
+	ScoreReason    *string `gorm:"column:ScoreReason" json:"score_reason"`
+	ScoreBreakdown *string `gorm:"column:ScoreBreakdown" json:"score_breakdown"`
 }
 
 func (SiteAIInsight) TableName() string {

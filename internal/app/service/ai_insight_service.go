@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -178,6 +179,8 @@ func (s *AIInsightService) Persist(ctx context.Context, siteID string, insight d
 	defer span.End()
 
 	insight.SiteID = siteID
+	// a preview made by the new scoring is re-checked (Wes, 27 Oct)
+	client.RescoreSentInsight(&insight)
 	if _, err = s.persist(ctx, &insight, "", actorID); err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
@@ -201,6 +204,8 @@ func (s *AIInsightService) persist(ctx context.Context, insight *dto.AIInsightRe
 		GeminiModel:      geminiModel,
 		GeneratedBy:      actorID,
 		GeneratedAt:      insight.GeneratedAt,
+		ScoreReason:      nilIfEmpty(insight.ScoreReason),
+		ScoreBreakdown:   breakdownJSON(insight.ScoreBreakdown),
 	}
 
 	err = s.RepositoryTransaction.Do(ctx, func(ctx context.Context) error {
@@ -352,6 +357,10 @@ func (s *AIInsightService) get(ctx context.Context, siteID string) (res dto.AIIn
 		DataAssumptions:  make([]string, 0, len(assumptions)),
 		ContextWarnings:  make([]dto.AIInsightContextWarning, 0, len(warnings)),
 	}
+	if insight.ScoreReason != nil {
+		res.ScoreReason = *insight.ScoreReason
+	}
+	res.ScoreBreakdown = breakdownOf(insight.ScoreBreakdown)
 	for _, m := range metrics {
 		if m.MetricKey == constants.MetricKeyVehicleTraffic {
 			res.Metrics.VehicleTraffic = &dto.AIInsightMetric{}
@@ -377,6 +386,31 @@ func (s *AIInsightService) get(ctx context.Context, siteID string) (res dto.AIIn
 			AIExpectation: w.AIExpectation, Severity: w.Severity, Message: w.Message})
 	}
 	return
+}
+
+// breakdownJSON is the ScoreBreakdown column value (nil = NULL).
+func breakdownJSON(b *dto.AIScoreBreakdown) *string {
+	if b == nil {
+		return nil
+	}
+	raw, err := json.Marshal(b)
+	if err != nil {
+		return nil
+	}
+	v := string(raw)
+	return &v
+}
+
+// breakdownOf reads the ScoreBreakdown column (NULL or unreadable = nil).
+func breakdownOf(v *string) *dto.AIScoreBreakdown {
+	if v == nil || *v == "" {
+		return nil
+	}
+	var b dto.AIScoreBreakdown
+	if err := json.Unmarshal([]byte(*v), &b); err != nil {
+		return nil
+	}
+	return &b
 }
 
 // parseDistanceKm reads the free-text survey distance ("500m", "2km", "2")

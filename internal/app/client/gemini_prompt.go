@@ -30,7 +30,9 @@ func ifNotEmpty(val, fallback string) string {
 var responseSchema = map[string]any{
 	"type": "OBJECT",
 	"properties": map[string]any{
-		"overallScore": map[string]any{"type": "INTEGER", "description": "Skor keseluruhan 0-100 — WAJIB = " + overallScoreFormula},
+		"overallScore":     map[string]any{"type": "INTEGER", "description": "Skor keseluruhan 0-100 — WAJIB = " + overallScoreRule},
+		"scoreReason":      map[string]any{"type": "STRING", "description": "2-4 kalimat: MENGAPA skor total seperti itu; sebut faktor plus terbesar dan minus terbesar (aturan I.4)"},
+		"opportunityBonus": map[string]any{"type": "INTEGER", "description": "0-5: +1 per peluang konkret yang didukung input staf atau DATA TERUKUR (aturan I.3)"},
 		"recommendation": map[string]any{
 			"type": "STRING",
 			"enum": []string{"Strongly Recommended", "Recommended", "Proceed With Caution", "Reconsider"},
@@ -94,6 +96,7 @@ var responseSchema = map[string]any{
 		"overallScore", "recommendation", "headline", "narrative", "metrics",
 		"competitors", "risks", "opportunities", "confidenceLevel",
 		"confidenceReason", "dataAssumptions", "contextWarnings",
+		"scoreReason", "opportunityBonus",
 	},
 }
 
@@ -130,6 +133,27 @@ var contextWarningSchema = map[string]any{
 // "round(rata-rata 5 metrik)".
 var overallScoreFormula = "round(" + constants.ScoreWeightMainMetric + " × (footTraffic + demographics + competition + accessibility + economic) + " +
 	constants.ScoreWeightVehicleTraffic + " × vehicleTraffic)"
+
+// overallScoreRule (Wes, 27 Oct): the score from ALL inputs, computed the
+// same way by the server (ScoreInsight), which overrides Gemini's number.
+var overallScoreRule = fmt.Sprintf("%s − penalti risiko + opportunityBonus, dibatasi 0-100 (aturan I)", overallScoreFormula)
+
+// ruleI: one overall score from everything the staff entered + the map
+// data, and the written "why this score" (Wes, 27 Oct).
+var ruleI = fmt.Sprintf(`I) SKOR TOTAL DARI SEMUA INPUT (WAJIB)
+   Skor total dihitung server PERSIS seperti ini: dasar = %[1]s; dikurangi penalti risiko (setiap risk: high −%[2]d, moderate −%[3]d, low −%[4]d; total maksimal −%[5]d); ditambah opportunityBonus (0–%[6]d); hasil dibatasi 0–100. recommendation mengikuti band skor total ini.
+   1. SEMUA input staf dan DATA TERUKUR WAJIB tercermin di skor aspek (tidak ada input yang diabaikan):
+      - footTraffic: keramaian orang lewat, jam ramai, kantor/sekolah/kampus/apartemen di DATA TERUKUR, catatan tambahan tentang keramaian.
+      - vehicleTraffic: level/hitungan/catatan lalu lintas + parkir (aturan H).
+      - demographics: penduduk sekitar (demografi teramati), kantor/sekolah/kampus/apartemen di DATA TERUKUR, catatan tambahan.
+      - competition: kompetitor (data peta + teramati), catatan kompetitor staf (aturan G; boleh menggeser skor competition paling banyak ±5), FamilyMart terdekat (kanibalisasi).
+      - accessibility: ketersediaan + catatan parkir (Tidak ada → skor maksimal 60; Terbatas → maksimal 75), transportasi umum, landmark, akses jalan dari catatan.
+      - economic: kota/area, sales area, buka 24 jam, alkohol, catatan tambahan tentang sewa/biaya/pemilik/daya beli.
+   2. risks: setiap masalah yang ditulis staf (catatan tambahan, catatan parkir, catatan lalu lintas, catatan kompetitor; mis. banjir, sewa mahal, akses sempit, jalan satu arah, parkir tidak ada) WAJIB muncul sebagai risk dengan severity sesuai dampak: "high" = bisa membuat lokasi tidak layak; "moderate" = menurunkan penjualan secara nyata; "low" = gangguan kecil. Jangan menambah risk umum yang tidak didukung input atau data hanya untuk mengisi daftar. Maksimal 5 risks.
+   3. opportunityBonus (0–%[6]d): +1 untuk setiap peluang KONKRET yang didukung input staf atau DATA TERUKUR (mis. banyak kantor tercatat dalam radius, kampus di seberang, tidak ada pesaing dalam 300 m, jalan utama ramai dengan parkir luas). Peluang umum/spekulatif tidak dihitung. Jika tidak ada, 0.
+   4. scoreReason: 2–4 kalimat Bahasa Indonesia yang menjelaskan MENGAPA skor total seperti itu: sebut faktor plus terbesar dan faktor minus terbesar dengan nama konkret (aspek, risiko, atau data dari input staf/data peta). JANGAN menulis angka skor total (dihitung server); skor aspek boleh disebut.`,
+	overallScoreFormula, constants.ScoreRiskPenaltyHigh, constants.ScoreRiskPenaltyModerate, constants.ScoreRiskPenaltyLow,
+	constants.ScoreRiskPenaltyMax, constants.ScoreOpportunityBonusMax)
 
 // trafficLabels are the prompt words of the vehicle traffic levels
 // (prototype src/lib/traffic.ts TRAFFIC_LEVELS .ai).
@@ -325,6 +349,7 @@ func buildPrompt(site *model.Site, siteCtx *model.SiteContext, competitors []*mo
 		ctxRule += "\n\n" + ruleG
 	}
 	ctxRule += "\n\n" + ruleH
+	ctxRule += "\n\n" + ruleI
 
 	return fmt.Sprintf(`Anda adalah analis senior site selection FamilyMart Indonesia. Tugas: hasilkan analisis kelayakan lokasi yang TEGAS, KONSISTEN, dan TIDAK KONTRADIKTIF.
 
@@ -361,7 +386,7 @@ A) GROUND TRUTH & VALIDASI KLAIM USER
    6. Jika tidak ada masalah, kembalikan "contextWarnings": [].
 
 B) INTERNAL CONSISTENCY (WAJIB)
-   1. overallScore = %s. Tidak boleh menyimpang lebih dari 1 poin. (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)
+   1. overallScore = %s. (Lalu lintas kendaraan bobotnya lebih kecil: faktor utama, tapi tidak boleh mendominasi.)
    2. recommendation HARUS sesuai band overallScore: ≥82 "Strongly Recommended"; 70-81 "Recommended"; 55-69 "Proceed With Caution"; <55 "Reconsider".
    3. band setiap metrik HARUS sesuai score: ≥85 "high", 70-84 "good", 50-69 "moderate", <50 "low".
    4. narrative HARUS searah dengan recommendation. JANGAN campur "sangat menjanjikan" dengan "tidak layak" di paragraf yang sama.
@@ -384,7 +409,7 @@ OUTPUT:
 Kembalikan HANYA JSON sesuai schema. Jangan markdown fence, jangan komentar.`,
 		name, address, site.SiteCity, region, postalCode, district,
 		site.SiteLat, site.SiteLon, salesArea, yesNo(site.SiteOpen24Hours), yesNo(site.SiteSellingAlcohol), plannedOpening,
-		contextBlock, overallScoreFormula, site.SiteCity, site.SiteName1, ctxRule,
+		contextBlock, overallScoreRule, site.SiteCity, site.SiteName1, ctxRule,
 	)
 }
 
@@ -429,6 +454,9 @@ type geminiPayload struct {
 	ConfidenceReason string                        `json:"confidenceReason"`
 	DataAssumptions  []string                      `json:"dataAssumptions"`
 	ContextWarnings  []dto.AIInsightContextWarning `json:"contextWarnings"`
+	// Wes, 27 Oct (rule I)
+	ScoreReason      string `json:"scoreReason"`
+	OpportunityBonus int    `json:"opportunityBonus"`
 }
 
 // GeminiMaxOutputTokens is the default answer budget. site-dev-api sent
@@ -438,8 +466,12 @@ type geminiPayload struct {
 // normal answer still uses ~5,000-7,000 (billed by use, not by the cap).
 const GeminiMaxOutputTokens = 12000
 
+// GeminiTemperature: lower than site-dev-api's 0.35 so the same inputs
+// give (nearly) the same metric scores (Wes, 27 Oct).
+const GeminiTemperature = 0.2
+
 // GeminiRequest is the JSON body posted to generateContent for in (prompt +
-// response schema, temperature 0.35, GeminiMaxOutputTokens).
+// response schema, GeminiTemperature, GeminiMaxOutputTokens).
 func GeminiRequest(in GeminiInput) ([]byte, error) {
 	return geminiRequest(in, GeminiMaxOutputTokens)
 }
@@ -450,7 +482,9 @@ func geminiRequest(in GeminiInput, maxOutputTokens int) ([]byte, error) {
 	}
 	body.GenerationConfig.ResponseMimeType = "application/json"
 	body.GenerationConfig.ResponseSchema = responseSchema
-	body.GenerationConfig.Temperature = 0.35
+	// 0.2 (was 0.35, Wes 27 Oct: the score should move only when the
+	// inputs move)
+	body.GenerationConfig.Temperature = GeminiTemperature
 	body.GenerationConfig.MaxOutputTokens = maxOutputTokens
 
 	payload, err := json.Marshal(body)
@@ -476,11 +510,11 @@ func ParseGeminiAnswer(respBytes []byte, site *model.Site, now time.Time) (dto.A
 		return dto.AIInsightResponseGet{}, fmt.Errorf("gemini: unmarshal insight JSON: %w", err)
 	}
 
-	return dto.AIInsightResponseGet{
+	ins := dto.AIInsightResponseGet{
 		SiteID:           site.SiteID,
 		OverallScore:     out.OverallScore,
 		Recommendation:   out.Recommendation,
-		Headline:         headlineOf(site, out),
+		Headline:         out.Headline,
 		Narrative:        out.Narrative,
 		Metrics:          out.Metrics,
 		Competitors:      out.Competitors,
@@ -491,17 +525,24 @@ func ParseGeminiAnswer(respBytes []byte, site *model.Site, now time.Time) (dto.A
 		DataAssumptions:  out.DataAssumptions,
 		ContextWarnings:  out.ContextWarnings,
 		GeneratedAt:      now,
-	}, nil
+		ScoreReason:      out.ScoreReason,
+	}
+	// the overall score from all inputs, computed here (Wes, 27 Oct)
+	ScoreInsight(&ins, out.OpportunityBonus)
+	out.OverallScore, out.Recommendation = ins.OverallScore, ins.Recommendation
+	ins.Headline = headlineOf(site, out)
+	return ins, nil
 }
 
 // headlineOf is the fixed headline of the prompt ("<site name> — <rec>
 // (<score>/100)", rule 3), built here: in the live check (23 Oct) Gemini's
 // JSON mode sometimes garbled the dash (a literal "\u2014", or "\nA\n").
-// Gemini's own text is kept when the site has no name (preview without
-// one) or the answer has no recommendation.
+// Since the server computes the score (Wes, 27 Oct) a site without a name
+// (preview without one) gets "<rec> (<score>/100)" instead of Gemini's
+// text, whose number may differ.
 func headlineOf(site *model.Site, out geminiPayload) string {
-	if site == nil || strings.TrimSpace(site.SiteName1) == "" || out.Recommendation == "" {
-		return out.Headline
+	if site == nil || strings.TrimSpace(site.SiteName1) == "" {
+		return fmt.Sprintf("%s (%d/100)", out.Recommendation, out.OverallScore)
 	}
 	return fmt.Sprintf("%s — %s (%d/100)", site.SiteName1, out.Recommendation, out.OverallScore)
 }
