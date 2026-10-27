@@ -276,9 +276,7 @@ func TestAIInsight_GeminiFailureAnswers(t *testing.T) {
 		gemini.On("GenerateInsight", mock.Anything, mock.Anything).Return(dto.AIInsightResponseGet{}, "", tc.err)
 		h, _, _ := stack(t)
 
-		code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight/preview", map[string]any{
-			"site": map[string]any{"site_name_1": "Baru", "site_lat": -6.2, "site_lon": 106.8, "site_planned_opening_date": "2027-01-15"},
-		}, 1001)
+		code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight/preview", previewAt(-6.2, 106.8), 1001)
 
 		assert.Equal(t, tc.code, code)
 		assertSameJSON(t, []byte(tc.want), body)

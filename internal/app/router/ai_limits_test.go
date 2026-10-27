@@ -30,7 +30,9 @@ func limitsOn(t *testing.T, siteQuota, dailyCap int) {
 }
 
 func previewAt(lat, lng float64) map[string]any {
-	return map[string]any{"site": map[string]any{"site_name_1": "Baru", "site_lat": lat, "site_lon": lng, "site_planned_opening_date": "2027-01-15"}}
+	// one survey input: no AI on an empty survey (Wes, 27 Oct)
+	return map[string]any{"site": map[string]any{"site_name_1": "Baru", "site_lat": lat, "site_lon": lng, "site_planned_opening_date": "2027-01-15"},
+		"context": map[string]any{"peak_hours": "17-20"}}
 }
 
 func geminiAnswers(t *testing.T) *mocks.IGeminiClient {

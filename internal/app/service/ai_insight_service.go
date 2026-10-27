@@ -128,9 +128,6 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 		err = fmt.Errorf("site %s: %w", siteID, err)
 		return
 	}
-	if err = s.holdLimits(ctx, &held, site.SiteLat, site.SiteLon); err != nil {
-		return
-	}
 
 	in := client.GeminiInput{Site: site}
 	in.Context, err = s.RepositorySiteContext.GetBySiteID(ctx, siteID)
@@ -148,6 +145,14 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 		if in.Notes, err = s.RepositorySiteContext.GetCustomNotesBySiteID(ctx, siteID); err != nil {
 			return
 		}
+	}
+	// Wes, 27 Oct: no AI on an empty survey (nothing counted)
+	if !aiInputsFilled(in.Context, in.Notes) {
+		err = errAIInputsEmpty()
+		return
+	}
+	if err = s.holdLimits(ctx, &held, site.SiteLat, site.SiteLon); err != nil {
+		return
 	}
 
 	in.Measured = s.measuredFor(ctx, site.SiteLat, site.SiteLon)
@@ -404,7 +409,14 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 	defer span.End()
 
 	var held aiHeld
-	if err = s.holdUser(ctx, &held, actorID); err == nil {
+	// Wes, 27 Oct: no AI on an empty survey (checked before any limit)
+	if !previewInputsFilled(req.Context) {
+		err = errAIInputsEmpty()
+	}
+	if err == nil {
+		err = s.holdUser(ctx, &held, actorID)
+	}
+	if err == nil {
 		err = s.holdLimits(ctx, &held, req.Site.SiteLat, req.Site.SiteLon)
 	}
 	if err != nil {

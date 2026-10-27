@@ -746,7 +746,7 @@ paths:
       description: |
         Roles - all (the app shows it to staff). One Gemini call (~20-30 s). Counts against the limits:
         per staff per day, per site location (~110 m, all users, all rounds) and per day for everyone.
-        Only answered calls count. AI off on this server = 503.
+        Only answered calls count. AI off on this server = 503. Empty survey = 400 (baru, 27 Okt).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiGenerate
       requestBody:
@@ -769,6 +769,7 @@ paths:
                   - properties:
                       data: {$ref: '#/components/schemas/AIInsight'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '400': {$ref: '#/components/responses/AIEmptyInputs'}
         '403': {$ref: '#/components/responses/NoToken'}
         '422':
           description: site_id missing
@@ -786,7 +787,8 @@ paths:
       summary: AI analysis for a site that is not saved yet ("Buat analisis AI"); nothing stored
       description: |
         Roles - all. Same limits as generate. Send the answer back later as `insight` in
-        `POST /v1/task/{status}` to store it without a second Gemini call. Only `site.site_lat`/`site_lon` are required.
+        `POST /v1/task/{status}` to store it without a second Gemini call. Only `site.site_lat`/`site_lon` are required,
+        plus at least one survey input in `context` (else 400, baru 27 Okt).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiPreview
       requestBody:
@@ -812,6 +814,7 @@ paths:
                   - properties:
                       data: {$ref: '#/components/schemas/AIInsight'}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '400': {$ref: '#/components/responses/AIEmptyInputs'}
         '403': {$ref: '#/components/responses/NoToken'}
         '422':
           description: Coordinates missing (0)
@@ -1978,7 +1981,7 @@ paths:
     post:
       tags: [Background jobs]
       summary: Make a queued AI analysis
-      description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`.
+      description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`, except an empty survey (nothing to analyse) answers 200 so the queue does not retry.
       x-roles: [job-service]
       operationId: queueAIInsight
       security:
@@ -2271,6 +2274,16 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
           example: {code: 500, status: failure, message: Internal Server Error, errors: {error: '...'}}
+    AIEmptyInputs:
+      description: |
+        (baru, 27 Okt) The survey is empty: no AI call, nothing counted. At least ONE survey input must be filled:
+        foot traffic, peak hours, vehicle traffic (level, count or note), parking (availability or note), public
+        transport, landmark, demographics, competitor note, or an extra note. Name + pin + sales area alone are not
+        enough; competitor rows (filled from the map) do not count. Disable the AI button with this hint.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 400, status: failure, message: Bad Request, errors: {error: 'Analisis AI belum bisa dibuat: data survei masih kosong. Isi minimal satu: keramaian orang lewat, jam ramai, lalu lintas kendaraan, parkir, transportasi umum, landmark sekitar, penduduk sekitar, catatan kompetitor, atau catatan tambahan.'}}
     AILimit:
       description: An AI limit is reached (per staff per day, per site location, or per day for everyone)
       content:

@@ -64,6 +64,11 @@ func (h QueueHandler) AIInsight(c echo.Context) (err error) {
 
 	if _, err = h.ServicesAIInsight.Generate(ctx.Request().Context(), req.SiteID, req.ActorID); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		// nothing to do (empty survey, Wes 27 Oct): 200, so the queue does
+		// not retry a job that can never succeed
+		if service.AIInsightSkipped(err) {
+			return ctx.Serve(nil)
+		}
 		return ctx.Serve(err)
 	}
 

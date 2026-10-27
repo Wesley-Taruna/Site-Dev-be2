@@ -105,7 +105,10 @@ func TestSideBySide_SaveNewSiteAndSubmit(t *testing.T) {
 		chainResult(),
 		sqlfake.Result{Match: `FROM "Tasks" WHERE TaskID = @p1`, Columns: taskColumns, Rows: [][]driver.Value{{taskID, siteID, "DRAFT", int64(1001), int64(0), created, created}}},
 		sqlfake.Result{Match: `FROM "Sites" WHERE SiteID = @p1`, Columns: siteColumns, Rows: [][]driver.Value{newSite}},
-		noRows(`FROM "SiteContexts" WHERE SiteID`),
+		// the survey just saved (peak hours): the AI step reads it (no AI
+		// on an empty survey, Wes 27 Oct), the task detail shows it
+		sqlfake.Result{Match: `FROM "SiteContexts" WHERE SiteID`, Columns: []string{"SiteID", "PeakHours", "CreatedAt", "UpdatedAt"},
+			Rows: [][]driver.Value{{siteID, "17-20", created, created}}},
 		noRows(`FROM "ApprovalHDR" WHERE TaskID`),
 		noRows(`FROM "SiteAttachments" WHERE SiteID`),
 		noRows(`FROM "TaskHistories" WHERE TaskID`),
@@ -141,7 +144,8 @@ func TestSideBySide_SaveNewSiteAndSubmit(t *testing.T) {
 		Site:        site,
 		Context:     &oldSiteContextResp{SiteID: siteID, PeakHours: "17-20", Competitors: []oldCompetitorResp{{ID: 51, CompetitorName: "Indomaret", Distance: "50m"}}},
 		Attachments: []oldAttachmentResp{{SiteAttachmentID: 41, FileName: "depan.jpg", Path: "bucket/temp/depan.jpg"}},
-		Task:        oldTaskFullDetailResp{Site: detailSite, Task: oldTaskFullDetailTaskSection{TaskID: taskID, TaskStatus: "DRAFT"}},
+		Task: oldTaskFullDetailResp{Site: detailSite, Context: &oldSiteContextResp{SiteID: siteID, PeakHours: "17-20", CreatedAt: created, UpdatedAt: created},
+			Task: oldTaskFullDetailTaskSection{TaskID: taskID, TaskStatus: "DRAFT"}},
 	}), body)
 
 	// SQL in site-dev-api's order (its middleware user lookup first)
