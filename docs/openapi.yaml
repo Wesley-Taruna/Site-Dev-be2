@@ -1,0 +1,2945 @@
+openapi: 3.0.3
+info:
+  title: Site Dev API (site-dev-backend)
+  version: 0.1.0-dev
+  description: |
+    REST API of **Site Development** (site survey, Gemini AI location score, approval
+    chain Dept Head -> Div Head) for the Familink mobile app and the FamilyMart web portal.
+    Written from the code (handlers, DTOs, validation) of `site-dev-backend`; a Go test
+    (`internal/app/router/openapi_routes_test.go`) fails when a route is added or removed
+    without updating this file.
+
+    **Login (Bearer token).** Every route except the health check, `POST /v1/validation/approval`,
+    the background-job callbacks (Basic auth) and the boilerplate sample needs
+    `Authorization: Bearer <JWT>`. The token is HS256, signed with the server's `[jwt] key`, claims
+    `user_id` (number = NIK, must exist in `Users`), `expire_at` (Unix seconds), optional
+    `permissions`, `timezone`. **The role is read from the `Users` table, not from the token.**
+    Who issues real tokens for Familink is still open (plan Q1b); on dev, test tokens per role.
+    - no `Authorization` header: **403** `Forbidden`
+    - bad or wrongly signed token: **401** `Unauthorized`
+    - token past `expire_at`: **401** `Your token is expired`
+    - token fine but `user_id` not in `Users`: **401** `user not found`
+
+    **Answer envelope (familabs).** Every JSON answer is
+    `{code, status, message, data, errors, total, page, per_page}`; empty fields are left out.
+    - success: `{"code":200,"status":"success","data":...}`
+    - list: adds `total`, `page`, `per_page` (only when `total` > 0)
+    - error: `{"code":4xx/5xx,"status":"failure","message":"<HTTP text>","errors":{"error":"<text>"}}`;
+      the text in `errors.error` is often Indonesian and meant for the user.
+    - validation error: **422** `{"errors":{"<field>":"<message>"}}`
+
+    **Pages.** Lists return **20 rows per page** (`?page=1,2,...`). The older lists ignore
+    `per_page`/`limit` (always 20); send `per_page=20` anyway, because the envelope's `page`/`per_page`
+    are only right when `per_page` is sent (without it the server answers `page: 1, per_page: <total>`).
+    The newer lists (Activity Log, Portal) take `limit` (or `per_page`), default 20, max 100.
+
+    **Times (WIB).** The server runs with `TZ=Asia/Jakarta` and the database holds WIB wall-clock time.
+    Timestamps come out as RFC 3339 with a `Z` at the end (as the old site-dev-api did), but the
+    digits are **WIB**: show them as they are, do **not** add 7 hours. Dates without time are
+    `YYYY-MM-DD` (`""` when empty).
+
+    **Status values (exact, keep the spelling).** Stored on a request (`task_status`): `DRAFT`,
+    `WAITING_DEPT_HEAD`, `WAITING_DIV_HEAD`, `HOLD_DEPT_HEAD`, `HOLD_DIV_HEAD`, `REVISION`
+    ("Ditolak, bisa direvisi"), `REJECTED` ("Ditolak final"), `COMPLETED` (approved by the last level),
+    `CANCELLED` ("Dibatalkan"). `SUBMITED` (sic) is only the *send* action in `POST /v1/task/SUBMITED`.
+    `APPROVED` is never stored on a request; it is a portal group name.
+
+    **Roles** (`Users.RoleID`): `USER` (site staff, "Staf"), `DEPT_HEAD`, `DIV_HEAD`, `ADMIN`.
+    Each operation lists who may call it in its description and in `x-roles`.
+
+    **Errors kept from site-dev-api.** Most older endpoints answer an unknown id with **500**
+    `record not found` (not 404); only the new endpoints use 404. Unknown attachment = 422.
+
+    Marked **(baru, 26 Okt)**: added by Wes's 26 Oct changes (optional notes on Tolak, Batalkan
+    pengajuan, Hapus draft).
+  contact:
+    name: Site Dev (Wes, FamilyMart Indonesia)
+servers:
+  - url: /
+    description: this server
+tags:
+  - name: Task / Pengajuan
+    description: Site requests ("Pengajuan") of the site staff - save, send, list, detail, cancel, delete draft.
+  - name: Approval
+    description: Dept Head / Div Head decisions ("Persetujuan") and the e-mail approval link.
+  - name: AI Insight
+    description: Gemini location score ("Analisis AI"). Called only by this backend; the app never holds the Gemini key. Limits answer 429.
+  - name: Map / Places
+    description: Sites, map points, active FamilyMart stores, competitors and offices near a point, address from a pin.
+  - name: Activity Log
+    description: Activity Log feed of staff, Dept Head and Div Head.
+  - name: Notifications
+    description: Approver "Baru" news (new requests in the Persetujuan tab).
+  - name: Portal
+    description: Site Dev menu of the FamilyMart web portal (office users, not site staff).
+  - name: Competitor brands
+    description: The competitor brand list (logos, colours, name patterns).
+  - name: Master data
+    description: Wilayah (province, regency, district, village, postal code) and dashboard counts.
+  - name: Files
+    description: Photo upload / remove and attachment download.
+  - name: Admin
+    description: Users, roles, approval matrix, AI and geocoding limits. ADMIN only.
+  - name: Login / token
+    description: Token check.
+  - name: Background jobs
+    description: Callbacks of the background-job service (Cloud Tasks). Basic auth `[public_api]`, not for apps.
+  - name: Health
+    description: Health check and this documentation.
+  - name: Boilerplate sample
+    description: Sample routes of the FamilyMart Go template (`person`). Not used by Site Dev, no login, no table behind them; removal is plan question Q6.
+
+paths:
+  # ------------------------------------------------------------------ Task / Pengajuan
+  /v1/task:
+    get:
+      tags: [Task / Pengajuan]
+      summary: List of requests (Pengajuan)
+      description: |
+        Roles: all. `USER` sees only the requests they created; heads and ADMIN see all.
+        20 rows per page, newest first by default (`sort_by=CreatedAt&sort_dir=desc`).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskList
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          description: |
+            One stored status (e.g. `WAITING_DEPT_HEAD`), or a group: `HOLD` = both `HOLD_*`;
+            `REJECTED_ANY` = `REVISION` + `REJECTED` ("Ditolak").
+          schema: {type: string, example: WAITING_DEPT_HEAD}
+        - name: status_not
+          in: query
+          description: Comma-separated statuses to leave out, used only when `status` is empty. The staff app's active list uses `REJECTED,CANCELLED`; the heads' Semua tab `DRAFT`.
+          schema: {type: string, example: 'REJECTED,CANCELLED'}
+        - name: site_id
+          in: query
+          schema: {type: string, example: ST20261027000001}
+        - $ref: '#/components/parameters/Q'
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [CreatedAt, TaskStatus], default: CreatedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/TaskRow'}}
+              example:
+                code: 200
+                status: success
+                data:
+                  - task_id: TS20261027000001
+                    site_id: ST20261027000001
+                    site_name_1: Uji Kemang Raya
+                    site_address_1: Jl. Kemang Raya No. 10, Bangka
+                    site_address_2: Kecamatan Mampang Prapatan, Kota Jakarta Selatan
+                    site_address_3: DKI Jakarta
+                    task_status: WAITING_DEPT_HEAD
+                    created_by: 90000101
+                    updated_by: 90000101
+                    created_at: '2026-10-27T09:15:00Z'
+                    updated_at: '2026-10-27T09:20:00Z'
+                    submit_count: 1
+                total: 1
+                page: 1
+                per_page: 20
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadPage'}
+  /v1/task/site-list:
+    get:
+      tags: [Task / Pengajuan]
+      summary: Site Request table (every request except APPROVED)
+      description: Roles - all; every role sees every request (old web app's "Site Request" table). 20 rows per page.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskSiteList
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Q'
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [CreatedAt, TaskStatus], default: CreatedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Requests
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/TaskRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/status/count:
+    get:
+      tags: [Task / Pengajuan]
+      summary: Requests per status (Home counts)
+      description: Roles - all. `USER` counts only their own requests. Statuses with 0 are not listed.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskStatusCount
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/StatusCount'}}
+              example:
+                code: 200
+                status: success
+                data:
+                  - {task_status: DRAFT, count: 2}
+                  - {task_status: WAITING_DEPT_HEAD, count: 1}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/nearby:
+    get:
+      tags: [Task / Pengajuan]
+      summary: Other active requests near a point
+      description: |
+        Roles - all. Active requests of all staff around a point, nearest first (sent and not final:
+        `WAITING_*`, `HOLD_*`, `REVISION`, `COMPLETED`; not `DRAFT`, `REJECTED`, `CANCELLED`).
+        Only name, status, owner and distance; no phone numbers or survey of other staff.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskNearby
+      parameters:
+        - $ref: '#/components/parameters/LatRequired'
+        - $ref: '#/components/parameters/LngRequired'
+        - name: radius
+          in: query
+          description: Metres; 0 or missing = 500, max 2000.
+          schema: {type: integer, minimum: 0, maximum: 2000, default: 500}
+        - name: exclude_site_id
+          in: query
+          description: Leave this site out (the one being edited).
+          schema: {type: string}
+      responses:
+        '200':
+          description: Nearby requests
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/NearbyRequest'}}
+        '400':
+          description: Point outside Indonesia, or radius above 2000
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              examples:
+                outside: {value: {code: 400, status: failure, message: Bad Request, errors: {error: Koordinat tidak valid (harus di Indonesia).}}}
+                radius: {value: {code: 400, status: failure, message: Bad Request, errors: {error: radius maksimal 2000 m}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadLatLng'}
+  /v1/task/{id}:
+    get:
+      tags: [Task / Pengajuan]
+      summary: Request detail (site, survey, approval chain, history, photos)
+      description: |
+        Roles - all; `USER` only their own requests (else 403). `id` = task_id (`TS...`) or site_id (`ST...`).
+        `context` is null when the survey was never filled.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskDetail
+      parameters:
+        - $ref: '#/components/parameters/TaskOrSiteId'
+      responses:
+        '200':
+          description: Detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/TaskDetail'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: No token, or a USER asking for someone else's request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 403, status: failure, message: Forbidden, errors: {error: Anda tidak punya akses ke task TS20261027000002}}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/task/{id}/history:
+    get:
+      tags: [Task / Pengajuan]
+      summary: History rows of a request (Riwayat), oldest first
+      description: Roles - all. `id` = site_id.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskHistory
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/TaskHistory'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/task/{id}/attachment:
+    get:
+      tags: [Task / Pengajuan]
+      summary: Photos / attachments of a request
+      description: Roles - all. `id` = site_id.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: taskAttachments
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      responses:
+        '200':
+          description: Attachments
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/TaskAttachment'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/context/{site_id}:
+    put:
+      tags: [Task / Pengajuan]
+      summary: Replace the on-site survey (Konteks On-Site / Survei lapangan)
+      description: |
+        Roles - the creator of the site only, while the request is `DRAFT` or `REVISION`.
+        Replaces all fields and both lists (competitors, custom notes).
+      x-roles: [USER]
+      operationId: taskContextUpdate
+      parameters:
+        - $ref: '#/components/parameters/SiteIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteContextInput'}
+      responses:
+        '200':
+          description: Saved survey
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/SiteContext'}
+        '400':
+          description: Already sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: 'Task sudah disubmit, konteks tidak bisa diedit lagi'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: No token, or not the creator
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 403, status: failure, message: Forbidden, errors: {error: Hanya pembuat site Uji Kemang Raya yang bisa edit konteks}}
+        '422': {$ref: '#/components/responses/SurveyValidation'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/task/{status}:
+    post:
+      tags: [Task / Pengajuan]
+      summary: Save a request as draft, or send it (Simpan draft / Kirim)
+      description: |
+        Roles - `USER` (site staff); the creator for an existing site.
+        `status` = `DRAFT` (save) or `SUBMITED` (send; sic). `site.site_id` empty = new site, filled = update.
+
+        **To send (SUBMITED) only 3 things are needed** (Wes, 26 Oct): Nama site (`site_name_1`),
+        a map point (`site_lat`/`site_lon` valid, not 0,0) and Sales Area (`site_sales_area` > 0).
+        Missing ones answer **400** with the list in `data`. Everything else is optional.
+        A draft needs only `site_name_1` (422 otherwise).
+
+        **AI on save:** `generate_ai: true` = make an AI analysis after saving (limits apply in the job;
+        the save itself never fails because of AI); `false` = never; missing = server switch
+        `[ai_insight] auto_generate_on_save`. An `insight` made before by preview is stored as is.
+
+        **Duplicate check** (only when `[nearby_request] duplicate_check = "confirm"`): other active requests
+        within 200 m answer **409** with them in `data`; send again with `confirm_duplicate: true`.
+
+        A request returned to the staff (`REVISION`) is sent again with `SUBMITED` (history `RESUBMIT`,
+        `submit_count` + 1, approval restarts at level 1).
+      x-roles: [USER]
+      operationId: taskSave
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema: {type: string, enum: [DRAFT, SUBMITED]}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteUpsertInput'}
+            examples:
+              send-minimum:
+                summary: Send with only the 3 needed fields, no AI
+                value:
+                  site: {site_id: '', site_name_1: Uji Kemang Raya, site_lat: -6.2615, site_lon: 106.8106, site_sales_area: 120}
+                  generate_ai: false
+              draft:
+                summary: Save a draft with a survey
+                value:
+                  site: {site_id: '', site_name_1: Uji Kemang Raya, site_address_1: Jl. Kemang Raya No. 10, site_lat: -6.2615, site_lon: 106.8106, site_sales_area: 120, site_planned_opening_date: '2027-03-01'}
+                  context:
+                    foot_traffic_observation: Ramai sore hari
+                    peak_hours: 17:00-20:00
+                    parking_availability: LIMITED
+                    vehicle_traffic_level: BUSY
+                    vehicle_traffic_count: 120
+                    vehicle_traffic_minutes: 10
+                    competitors: [{competitor_name: Indomaret, competitor_type: Mini Market, distance: 150 m}]
+                    custom_notes: []
+                  attachment: [{file_name: depan.jpg, path: sitedev-temp/temp/20261027-abc123-depan.jpg}]
+                  notes: ''
+                  generate_ai: false
+      responses:
+        '200':
+          description: Saved; answer = site, survey, photos and the full request detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/SiteUpsertResult'}
+        '400':
+          description: Send without the 3 needed fields; same site name; or the request was already sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              examples:
+                missing:
+                  summary: Send is missing fields (data lists them)
+                  value: {code: 400, status: failure, message: Bad Request, data: [site_location, site_sales_area], errors: {error: 'Belum bisa dikirim. Lengkapi dulu: Lokasi (titik di peta), Sales Area.'}}
+                duplicate-name:
+                  value: {code: 400, status: failure, message: Bad Request, errors: {error: Site with name Uji Kemang Raya already exists}}
+                already-sent:
+                  value: {code: 400, status: failure, message: Bad Request, errors: {error: Data site sudah disubmit tidak bisa diedit kembali}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: No token, or not the creator of this site
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 403, status: failure, message: Forbidden, errors: {error: Hanya pembuat site Uji Kemang Raya yang bisa submit}}
+        '409':
+          description: Other active requests close by (only with duplicate_check = confirm)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example:
+                code: 409
+                status: failure
+                message: Conflict
+                data: [{site_id: ST20261020000004, site_name: Uji Kemang Dua, task_status: WAITING_DEPT_HEAD, owner_id: 90000102, owner_name: Uji Staf Dua, lat: -6.2616, lng: 106.8109, distance_m: 35}]
+                errors: {error: 'DUPLICATE_NEARBY: sudah ada 1 pengajuan aktif dalam 200 m dari titik ini. Cek dulu, lalu kirim ulang dengan confirm_duplicate = true bila tetap ingin mengirim.'}
+        '422':
+          description: Body rules (name for a draft, notes length, survey fields) or a status other than DRAFT/SUBMITED
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              examples:
+                name: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {site_name_1: The site name 1 field is required.}}}
+                notes: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {notes: The notes may not be greater than 500}}}
+                bad-status: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {'status (must be DRAFT or SUBMITED)': The status (must be DRAFT or SUBMITED) is invalid value.}}}
+  /v1/task/{id}/cancel:
+    post:
+      tags: [Task / Pengajuan]
+      summary: (baru, 26 Okt) Cancel a returned request (Batalkan pengajuan)
+      description: |
+        Roles - the creator only. Only a request in `REVISION` ("Ditolak, bisa direvisi") can be cancelled;
+        it becomes `CANCELLED` ("Dibatalkan"), stays with its history (action `CANCEL`), and drops out of the
+        active lists and the duplicate check. `id` = task_id or site_id. Body optional.
+      x-roles: [USER]
+      operationId: taskCancel
+      parameters:
+        - $ref: '#/components/parameters/TaskOrSiteId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CancelInput'}
+            example: {notes: Lokasi sudah disewa pihak lain}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: No token, or not the creator
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 403, status: failure, message: Forbidden, errors: {error: Hanya pembuat pengajuan yang bisa membatalkannya.}}
+        '404':
+          description: Unknown request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 404, status: failure, message: Not Found, errors: {error: Pengajuan tidak ditemukan.}}
+        '409':
+          description: Not in REVISION (or changed meanwhile)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 409, status: failure, message: Conflict, errors: {error: Hanya pengajuan yang Ditolak (bisa direvisi) yang bisa dibatalkan.}}
+        '422':
+          description: Notes longer than 500 characters
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {notes: Catatan maksimal 500 karakter.}}
+  /v1/site/{id}:
+    get:
+      tags: [Map / Places]
+      summary: One site
+      description: Roles - all. `id` = site_id.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteDetail
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      responses:
+        '200':
+          description: Site
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/Site'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+    delete:
+      tags: [Task / Pengajuan]
+      summary: (baru, 26 Okt) Delete a draft that was never sent (Hapus draft)
+      description: |
+        Roles - the creator only. Only a `DRAFT` that was never sent (no approval round, no SUBMIT/RESUBMIT
+        in its history). Removes the site, survey, photos, AI result, history and request for good.
+        The AI limits keep what the draft used. `id` = site_id or task_id.
+      x-roles: [USER]
+      operationId: siteDeleteDraft
+      parameters:
+        - $ref: '#/components/parameters/TaskOrSiteId'
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403':
+          description: No token, or not the creator
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 403, status: failure, message: Forbidden, errors: {error: Hanya pembuat draft yang bisa menghapusnya.}}
+        '404':
+          description: Unknown request
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 404, status: failure, message: Not Found, errors: {error: Pengajuan tidak ditemukan.}}
+        '409':
+          description: Not a never-sent draft
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 409, status: failure, message: Conflict, errors: {error: Hanya draft yang belum pernah dikirim yang bisa dihapus.}}
+
+  # ------------------------------------------------------------------ Approval
+  /v1/task/pending-approvals:
+    get:
+      tags: [Approval]
+      summary: Waiting for my decision (Persetujuan - Perlu tindakan)
+      description: Roles - DEPT_HEAD, DIV_HEAD (any user who is the approver of a level; others get an empty list). 20 rows per page.
+      x-roles: [DEPT_HEAD, DIV_HEAD]
+      operationId: approvalPending
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Q'
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [CreatedAt, Level], default: CreatedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Pending levels
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/PendingApproval'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/approval-history:
+    get:
+      tags: [Approval]
+      summary: What I already decided (approve, reject, revision, hold)
+      description: Roles - DEPT_HEAD, DIV_HEAD. 20 rows per page, newest decision first by default.
+      x-roles: [DEPT_HEAD, DIV_HEAD]
+      operationId: approvalHistory
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Q'
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [ActedAt, CreatedAt, Level], default: ActedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Decisions
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/ApprovalHistoryRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/{id}/approve:
+    post:
+      tags: [Approval]
+      summary: Decide on a request (Setujui / Tolak / Hold / Lanjutkan)
+      description: |
+        Roles - the approver of the current level (DEPT_HEAD at level 1, DIV_HEAD at level 2). `id` = task_id.
+        | decision | UI word | effect |
+        |---|---|---|
+        | `APPROVE` | Setujui | next level, or `COMPLETED` after the last level |
+        | `REJECT` | Tolak final | `REJECTED`, closed for good |
+        | `REVISION` | Tolak, bisa direvisi | `REVISION`, back to the staff |
+        | `HOLD` | Hold Status | `HOLD_<ROLE>`; `notes` (reason) **required** |
+        | `RELEASE` | Lanjutkan | back to `WAITING_<ROLE>` |
+        `notes` optional (max 500) except for HOLD (baru, 26 Okt: no longer required for REJECT / REVISION).
+        A held level takes only `RELEASE`. The answer has no `data`.
+      x-roles: [DEPT_HEAD, DIV_HEAD]
+      operationId: approvalDecide
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: task_id
+          schema: {type: string, example: TS20261027000001}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DecisionInput'}
+            examples:
+              approve: {value: {decision: APPROVE, notes: ''}}
+              hold: {value: {decision: HOLD, notes: Menunggu konfirmasi pemilik}}
+              revision: {value: {decision: REVISION, notes: Foto tampak depan kurang jelas}}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '400':
+          description: HOLD/RELEASE in the wrong state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              examples:
+                held: {value: {code: 400, status: failure, message: Bad Request, errors: {error: Pengajuan ini sedang Anda tahan. Tekan Lanjutkan dulu.}}}
+                not-held: {value: {code: 400, status: failure, message: Bad Request, errors: {error: Pengajuan ini tidak sedang dalam Hold Status.}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: Unknown decision, HOLD without reason, notes too long
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              examples:
+                hold-reason: {value: {code: 422, status: failure, message: Unprocessable Entity, errors: {notes: Alasan Hold Status wajib diisi.}}}
+        '500':
+          description: Unknown task, not waiting, or the caller is not the approver of the current level (old error, kept)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 500, status: failure, message: Internal Server Error, errors: {error: 'task_service: no pending approval for this user on task TS20261027000001: record not found'}}
+  /v1/validation/approval:
+    post:
+      tags: [Approval]
+      summary: Exchange an e-mail approval code for a token (no login needed)
+      description: |
+        Roles - anyone with the link. The approval e-mail links to the app with `?approval_code=<32 chars>`;
+        this answers a token for the approver plus the site to open. The code must still be pending.
+      x-roles: [public]
+      operationId: approvalCodeLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approval_code]
+              properties:
+                approval_code: {type: string, minLength: 32, maxLength: 32}
+      responses:
+        '200':
+          description: Token, site, approver
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          jwt: {type: string}
+                          site_id: {type: string}
+                          user_profile: {$ref: '#/components/schemas/UserProfile'}
+        '422':
+          description: Missing code, or not 32 characters
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {approval_code: The approval code must be 32 characters.}}
+        '500':
+          description: Code unknown, expired or no longer pending (old error, kept)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 500, status: failure, message: Internal Server Error, errors: {error: 'approval_validation: code is invalid or expired'}}
+
+  # ------------------------------------------------------------------ AI Insight
+  /v1/task/ai-insight:
+    post:
+      tags: [AI Insight]
+      summary: Make a new AI analysis for a saved site (replaces the old one)
+      description: |
+        Roles - all (the app shows it to staff). One Gemini call (~20-30 s). Counts against the limits:
+        per staff per day, per site location (~110 m, all users, all rounds) and per day for everyone.
+        Only answered calls count. AI off on this server = 503.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: aiGenerate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [site_id]
+              properties:
+                site_id: {type: string, example: ST20261027000001}
+      responses:
+        '200':
+          description: The new insight (stored)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/AIInsight'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: site_id missing
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {site_id: The site id field is required.}}
+        '429': {$ref: '#/components/responses/AILimit'}
+        '502': {$ref: '#/components/responses/AIBadGateway'}
+        '503': {$ref: '#/components/responses/AIOff'}
+        '504': {$ref: '#/components/responses/AITimeout'}
+  /v1/task/ai-insight/preview:
+    post:
+      tags: [AI Insight]
+      summary: AI analysis for a site that is not saved yet ("Buat analisis AI"); nothing stored
+      description: |
+        Roles - all. Same limits as generate. Send the answer back later as `insight` in
+        `POST /v1/task/{status}` to store it without a second Gemini call. Only `site.site_lat`/`site_lon` are required.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: aiPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                site: {$ref: '#/components/schemas/PreviewSiteInput'}
+                context: {$ref: '#/components/schemas/SiteContextInput'}
+            example:
+              site: {site_name_1: Uji Kemang Raya, site_lat: -6.2615, site_lon: 106.8106, site_sales_area: 120}
+              context: {foot_traffic_observation: Ramai sore hari, vehicle_traffic_level: BUSY}
+      responses:
+        '200':
+          description: Insight (not stored)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/AIInsight'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: Coordinates missing (0)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {site_lat: The site lat field is required.}}
+        '429': {$ref: '#/components/responses/AILimit'}
+        '502': {$ref: '#/components/responses/AIBadGateway'}
+        '503': {$ref: '#/components/responses/AIOff'}
+        '504': {$ref: '#/components/responses/AITimeout'}
+  /v1/task/ai-insight/quota:
+    get:
+      tags: [AI Insight]
+      summary: AI analyses left ("Sisa analisis AI")
+      description: |
+        Roles - all. `limit`/`remaining` = the caller's own per day. With `?lat=&lng=` (or `?site_id=`) and the
+        per-site limit on, `site` is added; with the daily cap on, `server_today` is added.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: aiQuota
+      parameters:
+        - {name: lat, in: query, schema: {type: number, format: double}}
+        - {name: lng, in: query, schema: {type: number, format: double}}
+        - {name: site_id, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Limits
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/AIQuota'}
+              example:
+                code: 200
+                status: success
+                data:
+                  limit: 10
+                  remaining: 7
+                  site: {limit: 5, used: 0, remaining: 5}
+                  server_today: {limit: 60, used: 3, remaining: 57}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadLatLng'}
+  /v1/task/ai-insight/{site_id}:
+    get:
+      tags: [AI Insight]
+      summary: The stored AI analysis of a site
+      description: Roles - all. A site without an analysis answers 500 `record not found` (old behaviour; the app shows "Belum ada analisis AI").
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: aiGet
+      parameters:
+        - $ref: '#/components/parameters/SiteIdPath'
+      responses:
+        '200':
+          description: Insight
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/AIInsight'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+
+  # ------------------------------------------------------------------ Map / Places
+  /v1/site:
+    get:
+      tags: [Map / Places]
+      summary: List of sites
+      description: Roles - all. 20 rows per page.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteList
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - {name: city, in: query, description: exact SiteCity, schema: {type: string}}
+        - {name: region, in: query, description: exact SiteRegion (province), schema: {type: string}}
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [CreatedAt, SiteName1, SiteCity], default: CreatedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Sites
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/Site'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/site/maps:
+    get:
+      tags: [Map / Places]
+      summary: Map points - active FamilyMart stores plus requested sites (Peta)
+      description: Roles - all. Stores come from `AMFIBI_MASTER.dbo.MStore`; requested sites carry `task_status`.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteMaps
+      responses:
+        '200':
+          description: Points + counts per store type
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          sites: {type: array, items: {$ref: '#/components/schemas/MapPoint'}}
+                          store_types:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                store_type_name: {type: string}
+                                total: {type: integer}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/site/active-list:
+    get:
+      tags: [Map / Places]
+      summary: Active FamilyMart stores table (Site Active)
+      description: Roles - all. 20 rows per page; `q` matches store code or name.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteActiveList
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Q'
+      responses:
+        '200':
+          description: Stores
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/MapPoint'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/site/nearby-places:
+    get:
+      tags: [Map / Places]
+      summary: Competitors and offices around a point (Pilih titik)
+      description: |
+        Roles - all. Google Places first (server key), OpenStreetMap when Google refuses, fails, is over its
+        daily cap or has no key; `source` says which. Cached per ~110 m cell (Google 7 days, OSM 6 h).
+        A new area = 9 Google calls today. Server switch `[places] enabled` off = 503.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteNearbyPlaces
+      parameters:
+        - $ref: '#/components/parameters/LatRequired'
+        - $ref: '#/components/parameters/LngRequired'
+        - name: radius
+          in: query
+          description: Metres; 0 or missing = `[places] radius_m` (500); max `[places] max_radius_m` (1000).
+          schema: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: Places
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/NearbyArea'}
+        '400':
+          description: Point outside Indonesia, or radius too big
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: radius maksimal 1000 m}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadLatLng'}
+        '502':
+          description: Google failed and OpenStreetMap could not be reached
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 502, status: failure, message: Bad Gateway, errors: {error: Data peta (OpenStreetMap) tidak bisa diambil sekarang. Coba lagi sebentar lagi.}}
+        '503':
+          description: Switched off on this server
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Data sekitar titik belum diaktifkan di server ini ([places] enabled = false).'}}
+  /v1/site/{id}/context:
+    get:
+      tags: [Map / Places]
+      summary: The on-site survey of a site
+      description: Roles - all. `id` = site_id. No survey yet = 500 `record not found` (old behaviour).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteContext
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      responses:
+        '200':
+          description: Survey
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/SiteContext'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/geocoding/reverse:
+    get:
+      tags: [Map / Places]
+      summary: Address of a map point (pin address)
+      description: |
+        Roles - all. Google Geocoding in the backend; per-user daily quota (`[geocoding] daily_quota`, admin can
+        change it) and server-wide daily cap. `district`/`city`/`region` are not in this answer: look them up
+        with `GET /v1/wilayah/search?postal_code=`.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: geocodingReverse
+      parameters:
+        - $ref: '#/components/parameters/LatRequired'
+        - $ref: '#/components/parameters/LngRequired'
+      responses:
+        '200':
+          description: Address
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          address1: {type: string, example: 'Jl. Kemang Raya No.10, Bangka'}
+                          address2: {type: string, example: 'Kecamatan Mampang Prapatan, Kota Jakarta Selatan'}
+                          address3: {type: string, example: Daerah Khusus Ibukota Jakarta}
+                          postal_code: {type: string, example: '12730'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadLatLng'}
+        '429': {$ref: '#/components/responses/GeocodingLimit'}
+        '503': {$ref: '#/components/responses/GeocodingOff'}
+  /v1/geocoding/search:
+    get:
+      tags: [Map / Places]
+      summary: Address search by text (Peta search box)
+      description: Roles - all. `q` at least 3 characters; empty `q` = empty list. Same quota as reverse.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: geocodingSearch
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, minLength: 3, example: Jalan Senopati Jakarta}
+      responses:
+        '200':
+          description: Hits
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            lat: {type: number}
+                            lng: {type: number}
+                            display_name: {type: string}
+                            address1: {type: string}
+                            address2: {type: string}
+                            address3: {type: string}
+                            postal_code: {type: string}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: q shorter than 3
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {q (minimal 3 karakter): The q (minimal 3 karakter) is invalid value.}}
+        '429': {$ref: '#/components/responses/GeocodingLimit'}
+        '503': {$ref: '#/components/responses/GeocodingOff'}
+
+  # ------------------------------------------------------------------ Activity Log
+  /v1/activity:
+    get:
+      tags: [Activity Log]
+      summary: Activity Log rows
+      description: |
+        Roles - USER, DEPT_HEAD, DIV_HEAD (ADMIN gets an empty list).
+        Staff: every move on their own requests. Heads: every move by anyone on all requests sent at least once.
+        No note/reason on any row (it is in the request's Riwayat). Page size `limit` (default 20, max 100).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD]
+      operationId: activityList
+      parameters:
+        - name: filter
+          in: query
+          description: |
+            `all` (Semua, default); `action` (Perlu tindakan: staff = returned to me, heads = waiting/held at my level);
+            `mine` (staff: the approvers' moves on my requests; heads: my own decisions = Keputusan saya).
+          schema: {type: string, enum: [all, action, mine], default: all}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Rows, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/ActivityRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/activity/unread-count:
+    get:
+      tags: [Activity Log]
+      summary: Unread Activity Log rows (red badge)
+      description: Roles - USER, DEPT_HEAD, DIV_HEAD (ADMIN gets 0). Rows newer than the last `POST /v1/activity/seen`; never opened = last 3 days.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD]
+      operationId: activityUnreadCount
+      responses:
+        '200':
+          description: Count
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          count: {type: integer, example: 3}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/activity/seen:
+    post:
+      tags: [Activity Log]
+      summary: Mark the Activity Log as seen up to now
+      description: Roles - all. No body; the answer has no data.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: activitySeen
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+
+  # ------------------------------------------------------------------ Notifications
+  /v1/task/approver-news:
+    get:
+      tags: [Notifications]
+      summary: What is new for an approver ("Baru" in Persetujuan)
+      description: |
+        Roles - DEPT_HEAD, DIV_HEAD (USER gets an empty list). Since the last `POST /v1/task/approver-news/seen`
+        (never = last 3 days): `NEW_TASK` = a request now waits for me; `DIV_HEAD_RETURNED` = the Div Head
+        sent one of my approved requests back to the staff (Dept Head only).
+      x-roles: [DEPT_HEAD, DIV_HEAD]
+      operationId: approverNews
+      responses:
+        '200':
+          description: News
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            task_id: {type: string}
+                            site_id: {type: string}
+                            kind: {type: string, enum: [NEW_TASK, DIV_HEAD_RETURNED]}
+                            created_at: {$ref: '#/components/schemas/WibTime'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/task/approver-news/seen:
+    post:
+      tags: [Notifications]
+      summary: Mark the approver news as seen up to now
+      description: Roles - all. No body; the answer has no data.
+      x-roles: [DEPT_HEAD, DIV_HEAD]
+      operationId: approverNewsSeen
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+
+  # ------------------------------------------------------------------ Portal
+  /v1/portal/site:
+    get:
+      tags: [Portal]
+      summary: Portal site log (sent requests, no drafts)
+      description: |
+        Roles - DEPT_HEAD, DIV_HEAD, ADMIN (office users; USER = 403). How the web portal logs in is still open
+        (same token check for now). Page size `limit` (default 20, max 100).
+      x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: portalList
+      parameters:
+        - name: status
+          in: query
+          description: |
+            Group: `WAITING_DEPT_HEAD`, `WAITING_DIV_HEAD`, `HOLD` (both HOLD_*), `APPROVED` (COMPLETED + APPROVED),
+            `REJECTED` (REJECTED + REVISION). Empty = all.
+          schema: {type: string, enum: [WAITING_DEPT_HEAD, WAITING_DIV_HEAD, HOLD, APPROVED, REJECTED]}
+        - {name: q, in: query, description: site name or site_id, schema: {type: string}}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/PortalRow'}}
+        '400':
+          description: Unknown status group
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: status "DRAFT" tidak dikenal}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/PortalStaff'}
+  /v1/portal/site/status/count:
+    get:
+      tags: [Portal]
+      summary: Portal counts per group (the 5 summary cards)
+      description: Roles - DEPT_HEAD, DIV_HEAD, ADMIN. Every group is listed, also with 0.
+      x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: portalStatusCount
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            status_group: {type: string}
+                            count: {type: integer}
+              example:
+                code: 200
+                status: success
+                data:
+                  - {status_group: WAITING_DEPT_HEAD, count: 1}
+                  - {status_group: WAITING_DIV_HEAD, count: 0}
+                  - {status_group: HOLD, count: 0}
+                  - {status_group: APPROVED, count: 2}
+                  - {status_group: REJECTED, count: 0}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/PortalStaff'}
+  /v1/portal/site/{id}/report:
+    get:
+      tags: [Portal]
+      summary: Everything the PDF report needs, in one call
+      description: Roles - DEPT_HEAD, DIV_HEAD, ADMIN. `id` = site_id (`ST...`). `insight` null when never made.
+      x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: portalReport
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      responses:
+        '200':
+          description: Report data
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/PortalReport'}
+        '400':
+          description: id is not a site_id
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: id "TS20261027000001" bukan site_id}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/PortalStaff'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/portal/site/{id}/ads:
+    put:
+      tags: [Portal]
+      summary: Set the ADS value of a site (Rupiah per day)
+      description: Roles - ADMIN (default while the editor question is open). Only for sites shown in the portal.
+      x-roles: [ADMIN]
+      operationId: portalAdsUpdate
+      parameters:
+        - $ref: '#/components/parameters/SiteIdInPathAsId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ads_value: {type: integer, format: int64, nullable: true, minimum: 0, maximum: 10000000000, example: 2500000}
+                ads_note: {type: string, maxLength: 300, example: Perkiraan dari 3 toko terdekat}
+      responses:
+        '200':
+          description: Saved ADS
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/SiteAds'}
+        '400':
+          description: Site not in the portal (draft)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: ADS hanya untuk site yang tampil di portal.}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422':
+          description: Value or note out of range
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {ads_value: The ads value must be between 0 and 10000000000.}}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+
+  # ------------------------------------------------------------------ Competitor brands
+  /v1/competitor-brands:
+    get:
+      tags: [Competitor brands]
+      summary: Competitor brand list
+      description: |
+        Roles - all. Every row of `CompetitorBrands`, also inactive ones (`active: false`, e.g. Yomart).
+        Active rows drive the nearby search. Today: Indomaret, Alfamart, Alfamidi, Lawson, Circle K, K3 Mart,
+        Kopi Kenangan, Tomoro Coffee; Yomart inactive.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: competitorBrands
+      responses:
+        '200':
+          description: Brands
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/CompetitorBrand'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+
+  # ------------------------------------------------------------------ Master data
+  /v1/wilayah/search:
+    get:
+      tags: [Master data]
+      summary: Find a village (kelurahan) by name or postal code
+      description: |
+        Roles - all. `postal_code` (exact) wins over `q`; `q` = village name, at least 3 characters.
+        Neither = empty list. 20 rows per page.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: wilayahSearch
+      parameters:
+        - {name: q, in: query, schema: {type: string, minLength: 3, example: Bangka}}
+        - {name: postal_code, in: query, schema: {type: string, example: '12730'}}
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Villages with district, regency, province
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/WilayahRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: q shorter than 3
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {q (minimal 3 karakter): The q (minimal 3 karakter) is invalid value.}}
+  /v1/wilayah/provinces:
+    get:
+      tags: [Master data]
+      summary: Province list
+      description: Roles - all.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: wilayahProvinces
+      responses:
+        '200':
+          description: Provinces
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            province_code: {type: string, example: '31'}
+                            province_name: {type: string, example: DKI JAKARTA}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/wilayah/provinces/{code}:
+    get:
+      tags: [Master data]
+      summary: A province with every regency, district and village
+      description: Roles - all. Large answer.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: wilayahProvinceTree
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string, example: '31'}}
+      responses:
+        '200':
+          description: Tree
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/ProvinceTree'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/dashboard/task/history:
+    get:
+      tags: [Master data]
+      summary: Dashboard - history rows of every request
+      description: Roles - all (old web dashboard). 20 rows per page.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: dashboardHistory
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: sort_by
+          in: query
+          schema: {type: string, enum: [CreatedAt], default: CreatedAt}
+        - $ref: '#/components/parameters/SortDir'
+      responses:
+        '200':
+          description: Rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ListEnvelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/DashboardHistoryRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+  /v1/dashboard/task/status/count:
+    get:
+      tags: [Master data]
+      summary: Dashboard - every request per status
+      description: Roles - all (not limited to own requests).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: dashboardStatusCount
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/StatusCount'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+
+  # ------------------------------------------------------------------ Files
+  /v1/upload/add:
+    post:
+      tags: [Files]
+      summary: Upload one photo (before saving the request)
+      description: |
+        Roles - all. Multipart field `file`. Answer = the stored name and its `<bucket>/<object>` path; put both
+        into `attachment` of `POST /v1/task/{status}`. **Note:** the file-storage connection is still a TODO in
+        the main build (plan Q4): until it is set up this answers 500 "not set up yet".
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: uploadAdd
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '200':
+          description: Stored
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          file_name: {type: string, example: 20261027-abc123-depan.jpg}
+                          path: {type: string, example: sitedev-temp/temp/20261027-abc123-depan.jpg}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: No `file` field
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {file: The file is invalid value.}}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /v1/upload/remove:
+    post:
+      tags: [Files]
+      summary: Remove an uploaded photo
+      description: Roles - all. The answer has no data.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: uploadRemove
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path: {type: string, example: sitedev-temp/temp/20261027-abc123-depan.jpg}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: path missing
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {path: The path field is required.}}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /v1/attachment/{id}/file:
+    get:
+      tags: [Files]
+      summary: Download an attachment (raw file)
+      description: Roles - all. `id` = attachment id (number). Content type from the file name. Unknown = 422 (old behaviour).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: attachmentFile
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, example: 12}}
+      responses:
+        '200':
+          description: The file
+          content:
+            image/jpeg:
+              schema: {type: string, format: binary}
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: Not a number, unknown attachment, or file missing
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {attachment: The attachment is not found}}
+
+  # ------------------------------------------------------------------ Admin
+  /v1/roles:
+    get:
+      tags: [Admin]
+      summary: Roles with their approval level
+      description: Roles - ADMIN only.
+      x-roles: [ADMIN]
+      operationId: roles
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            role_id: {type: string, example: DEPT_HEAD}
+                            role_name: {type: string, example: Department Head}
+                            role_level: {type: integer, example: 1}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+  /v1/users:
+    get:
+      tags: [Admin]
+      summary: Users with today's AI and geocoding quota
+      description: Roles - ADMIN only. Not paged.
+      x-roles: [ADMIN]
+      operationId: usersList
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/User'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+    post:
+      tags: [Admin]
+      summary: Add a user (NIK + role)
+      description: Roles - ADMIN only. `user_id` = NIK. Login itself stays with the token issuer.
+      x-roles: [ADMIN]
+      operationId: usersCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, username, email, role_id]
+              properties:
+                user_id: {type: integer, format: int64, example: 90000103}
+                username: {type: string, example: Uji Staf Tiga}
+                email: {type: string, format: email, example: staf3@example.test}
+                role_id: {type: string, enum: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]}
+      responses:
+        '200':
+          description: Created user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422':
+          description: Missing field or bad e-mail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {email: The email field is required.}}
+        '500':
+          description: Unknown role or the user exists (old error, kept)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /v1/users/{id}:
+    put:
+      tags: [Admin]
+      summary: Change a user's name, e-mail or role
+      description: Roles - ADMIN only. Empty fields are left unchanged.
+      x-roles: [ADMIN]
+      operationId: usersUpdate
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: {type: string}
+                email: {type: string}
+                role_id: {type: string, enum: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]}
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/User'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422': {$ref: '#/components/responses/BadId'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+    delete:
+      tags: [Admin]
+      summary: Remove a user
+      description: Roles - ADMIN only. The answer has no data.
+      x-roles: [ADMIN]
+      operationId: usersDelete
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422': {$ref: '#/components/responses/BadId'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/approval-matrix:
+    get:
+      tags: [Admin]
+      summary: Approval matrix (which user approves for which role)
+      description: |
+        Roles - any logged-in user (no admin check in the code, as in site-dev-api; the old web app shows it only
+        to ADMIN). Not paged.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: approvalMatrixList
+      responses:
+        '200':
+          description: Rows
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {type: array, items: {$ref: '#/components/schemas/ApprovalMatrixRow'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+    post:
+      tags: [Admin]
+      summary: Add an approver for a role
+      description: Roles - any logged-in user (no admin check in the code, as in site-dev-api).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: approvalMatrixCreate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id, user_id]
+              properties:
+                role_id: {type: string, example: DEPT_HEAD}
+                user_id: {type: integer, format: int64, example: 90000201}
+      responses:
+        '200':
+          description: Created row
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/ApprovalMatrixRow'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422':
+          description: Missing field
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {role_id: The role id field is required.}}
+        '500':
+          description: Unknown role or user (old error, kept)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /v1/approval-matrix/{id}:
+    put:
+      tags: [Admin]
+      summary: Change the approver or switch a row on/off
+      description: Roles - any logged-in user (no admin check in the code, as in site-dev-api). `user_id` 0 / missing `is_active` = unchanged. No data in the answer.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: approvalMatrixUpdate
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, example: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id: {type: integer, format: int64}
+                is_active: {type: boolean}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadId'}
+        '500': {$ref: '#/components/responses/RecordNotFound'}
+  /v1/settings/limits:
+    get:
+      tags: [Admin]
+      summary: Daily AI and geocoding limit per user
+      description: Roles - ADMIN only. Value from `SystemSettings`, else config, else 50 / 100.
+      x-roles: [ADMIN]
+      operationId: settingsLimits
+      responses:
+        '200':
+          description: Limits
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/Limits'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+    put:
+      tags: [Admin]
+      summary: Change the daily limits (missing = unchanged, given = at least 1)
+      description: Roles - ADMIN only.
+      x-roles: [ADMIN]
+      operationId: settingsLimitsUpdate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ai_insight_daily_quota: {type: integer, minimum: 1, example: 10}
+                geocoding_daily_quota: {type: integer, minimum: 1, example: 100}
+      responses:
+        '200':
+          description: New limits
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/Limits'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422':
+          description: Below 1
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 422, status: failure, message: Unprocessable Entity, errors: {ai_insight_daily_quota: The ai insight daily quota should be greater than 1}}
+  /v1/settings/quota-flush:
+    post:
+      tags: [Admin]
+      summary: Reset one user's counter for today (Reset Limit Pengguna)
+      description: Roles - ADMIN only.
+      x-roles: [ADMIN]
+      operationId: settingsQuotaFlush
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, quota_type]
+              properties:
+                user_id: {type: integer, format: int64, example: 90000101}
+                quota_type: {type: string, enum: [ai_insight, geocoding]}
+      responses:
+        '200':
+          description: Counter after the reset
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          user_id: {type: integer, format: int64}
+                          quota_type: {type: string}
+                          remaining: {type: integer}
+                          limit: {type: integer}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NotAdmin'}
+        '422':
+          description: Missing field or unknown quota_type
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+
+  # ------------------------------------------------------------------ Login / token
+  /v1/validation:
+    post:
+      tags: [Login / token]
+      summary: Is my token still good, and whose is it
+      description: Roles - all. No body. `nik` = `user_id` as text.
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: validateToken
+      responses:
+        '200':
+          description: Token owner
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/UserProfile'}
+              example: {code: 200, status: success, data: {user_id: 90000101, nik: '90000101', username: Uji Staf Satu, role: USER}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+
+  # ------------------------------------------------------------------ Background jobs
+  /v1/queue/approval-email:
+    post:
+      tags: [Background jobs]
+      summary: Send a queued approval e-mail
+      description: Called by the background-job service (Basic auth `[public_api]`), not by apps. The e-mail sender is still a TODO in the main build (plan Q4).
+      x-roles: [job-service]
+      operationId: queueApprovalEmail
+      security:
+        - jobBasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                to: {type: string}
+                to_name: {type: string}
+                task_id: {type: string}
+                site_name: {type: string}
+                submitted_by: {type: string}
+                approver_role: {type: string}
+                notes: {type: string}
+                approval_code: {type: string}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/BasicAuthFailed'}
+        '500': {$ref: '#/components/responses/ServerError'}
+  /v1/queue/ai-insight:
+    post:
+      tags: [Background jobs]
+      summary: Make a queued AI analysis
+      description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`.
+      x-roles: [job-service]
+      operationId: queueAIInsight
+      security:
+        - jobBasicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                site_id: {type: string}
+                actor_id: {type: integer, format: int64}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '401': {$ref: '#/components/responses/BasicAuthFailed'}
+        '429': {$ref: '#/components/responses/AILimit'}
+        '503': {$ref: '#/components/responses/AIOff'}
+  /v1/queue/ai-insight-quota-flush:
+    post:
+      tags: [Background jobs]
+      summary: Reset every user's AI counter (daily at 00:00 WIB)
+      description: Called by a scheduler (Basic auth).
+      x-roles: [job-service]
+      operationId: queueAIQuotaFlush
+      security:
+        - jobBasicAuth: []
+      responses:
+        '200':
+          description: Number of counters removed
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data:
+                        type: object
+                        properties:
+                          deleted: {type: integer}
+        '401': {$ref: '#/components/responses/BasicAuthFailed'}
+
+  # ------------------------------------------------------------------ Health + docs
+  /v1/health-check:
+    get:
+      tags: [Health]
+      summary: Health check (no login)
+      description: Answers 200 with the service name (`[app] name`) as `message`. Does not check the database.
+      x-roles: [public]
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Up
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Envelope'}
+              example: {code: 200, status: success, message: site-dev-api}
+  /v1/docs:
+    get:
+      tags: [Health]
+      summary: This page (interactive API docs)
+      description: Only when `[docs] enabled = true` (dev / local). Off by default, so production answers 404.
+      x-roles: [public]
+      operationId: docsPage
+      security: []
+      responses:
+        '200':
+          description: HTML page
+          content:
+            text/html:
+              schema: {type: string}
+  /v1/docs/openapi.yaml:
+    get:
+      tags: [Health]
+      summary: This API description (OpenAPI 3 YAML)
+      description: Only when `[docs] enabled = true`.
+      x-roles: [public]
+      operationId: docsSpec
+      security: []
+      responses:
+        '200':
+          description: The file
+          content:
+            application/yaml:
+              schema: {type: string}
+
+  # ------------------------------------------------------------------ Boilerplate sample
+  /v1/person:
+    get:
+      tags: [Boilerplate sample]
+      summary: Template sample - list persons
+      description: Sample of the FamilyMart Go template; not used, no login, no `person` table in the Site Dev database.
+      x-roles: [public]
+      operationId: samplePersonList
+      security: []
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    post:
+      tags: [Boilerplate sample]
+      summary: Template sample - create a person
+      description: Template sample; not used.
+      x-roles: [public]
+      operationId: samplePersonCreate
+      security: []
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '422': {$ref: '#/components/responses/ServerError'}
+  /v1/person/{id}:
+    get:
+      tags: [Boilerplate sample]
+      summary: Template sample - one person
+      description: Template sample; not used.
+      x-roles: [public]
+      operationId: samplePersonDetail
+      security: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    put:
+      tags: [Boilerplate sample]
+      summary: Template sample - update a person
+      description: Template sample; not used.
+      x-roles: [public]
+      operationId: samplePersonUpdate
+      security: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '500': {$ref: '#/components/responses/ServerError'}
+    delete:
+      tags: [Boilerplate sample]
+      summary: Template sample - delete a person
+      description: Template sample; not used.
+      x-roles: [public]
+      operationId: samplePersonDelete
+      security: []
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200': {$ref: '#/components/responses/OkNoData'}
+        '500': {$ref: '#/components/responses/ServerError'}
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'HS256 token signed with the server [jwt] key; claims user_id (NIK), expire_at (Unix seconds). On dev: test tokens per role.'
+    jobBasicAuth:
+      type: http
+      scheme: basic
+      description: '[public_api] username / password; only the background-job service knows it.'
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Page number, from 1 (0 or below = 422).
+      schema: {type: integer, minimum: 1, default: 1}
+    PerPage:
+      name: per_page
+      in: query
+      description: Ignored for the row count (always 20) but echoed in the envelope; send 20.
+      schema: {type: integer, default: 20}
+    Limit:
+      name: limit
+      in: query
+      description: Rows per page (or `per_page`), default 20, max 100.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Q:
+      name: q
+      in: query
+      description: Search text (site name).
+      schema: {type: string}
+    SortDir:
+      name: sort_dir
+      in: query
+      schema: {type: string, enum: [asc, desc], default: asc}
+    LatRequired:
+      name: lat
+      in: query
+      required: true
+      schema: {type: number, format: double, example: -6.2615}
+    LngRequired:
+      name: lng
+      in: query
+      required: true
+      schema: {type: number, format: double, example: 106.8106}
+    TaskOrSiteId:
+      name: id
+      in: path
+      required: true
+      description: task_id (`TS` + date + 6 digits) or site_id (`ST` + date + 6 digits)
+      schema: {type: string, example: ST20261027000001}
+    SiteIdInPathAsId:
+      name: id
+      in: path
+      required: true
+      description: site_id
+      schema: {type: string, example: ST20261027000001}
+    SiteIdPath:
+      name: site_id
+      in: path
+      required: true
+      schema: {type: string, example: ST20261027000001}
+    UserIdPath:
+      name: id
+      in: path
+      required: true
+      description: user_id (NIK)
+      schema: {type: integer, format: int64, example: 90000103}
+
+  responses:
+    OkNoData:
+      description: Done (no data)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Envelope'}
+          example: {code: 200, status: success}
+    Unauthorized:
+      description: Bad / expired token, or the user is not in the Users table
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            bad-token: {value: {code: 401, status: failure, message: Unauthorized, errors: {error: Unauthorized}}}
+            expired: {value: {code: 401, status: failure, message: Your token is expired}}
+            unknown-user: {value: {code: 401, status: failure, message: Unauthorized, errors: {error: user not found}}}
+    NoToken:
+      description: No Authorization header
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 403, status: failure, message: Forbidden, errors: {error: Forbidden}}
+    NotAdmin:
+      description: Not ADMIN (or no token)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 403, status: failure, message: Forbidden, errors: {error: hanya admin yang bisa mengakses fitur ini}}
+    PortalStaff:
+      description: Site staff (USER) cannot open the portal (or no token)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 403, status: failure, message: Forbidden, errors: {error: Portal Site Dev hanya untuk pengguna kantor}}
+    BadPage:
+      description: page below 1
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 422, status: failure, message: Unprocessable Entity, errors: {page: Invalid page number}}
+    BadLatLng:
+      description: lat / lng missing or not a number
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 422, status: failure, message: Unprocessable Entity, errors: {lat: The lat is invalid value.}}
+    BadId:
+      description: id is not a number
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 422, status: failure, message: Unprocessable Entity, errors: {id: The id is invalid value.}}
+    SurveyValidation:
+      description: Survey field rules
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 422, status: failure, message: Unprocessable Entity, errors: {vehicle_traffic_minutes: The vehicle traffic minutes field is required when vehicle traffic count is present.}}
+    RecordNotFound:
+      description: Unknown id (old behaviour kept from site-dev-api - 500, not 404)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 500, status: failure, message: Internal Server Error, errors: {error: record not found}}
+    ServerError:
+      description: Server error
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 500, status: failure, message: Internal Server Error, errors: {error: '...'}}
+    AILimit:
+      description: An AI limit is reached (per staff per day, per site location, or per day for everyone)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          examples:
+            per-staff: {value: {code: 429, status: failure, message: Too Many Requests, errors: {error: Kuota generate AI insight harian (10) sudah habis, coba lagi besok.}}}
+            per-site: {value: {code: 429, status: failure, message: Too Many Requests, errors: {error: Batas analisis AI untuk lokasi ini sudah tercapai (5x).}}}
+            per-day: {value: {code: 429, status: failure, message: Too Many Requests, errors: {error: 'Batas analisis AI hari ini untuk semua pengguna sudah tercapai (60x), coba lagi besok.'}}}
+    AIOff:
+      description: AI is off on this server (no Gemini key) or Google refused the key
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Analisis AI belum aktif di server ini (kunci Gemini belum diisi, gemini.apikey).'}}
+    AIBadGateway:
+      description: Gemini failed to answer
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 502, status: failure, message: Bad Gateway, errors: {error: Analisis AI tidak tersedia sekarang (Gemini gagal menjawab). Coba lagi sebentar lagi.}}
+    AITimeout:
+      description: Gemini did not answer in time (60 s per try)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 504, status: failure, message: Gateway Timeout, errors: {error: 'Analisis AI tidak tersedia: Gemini tidak menjawab tepat waktu. Coba lagi sebentar lagi.'}}
+    GeocodingLimit:
+      description: Per-user daily quota or server daily cap reached
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 429, status: failure, message: Too Many Requests, errors: {error: Kuota reverse-geocode harian (100) sudah habis, coba lagi besok.}}
+    GeocodingOff:
+      description: Switched off, no key, or Google refused the key
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Alamat otomatis (Google Geocoding) belum diaktifkan di server ini ([geocoding] enabled = false).'}}
+    BasicAuthFailed:
+      description: Basic auth missing or wrong (plain JSON, not the envelope)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: {type: string}
+          example: {error: Basic auth required}
+
+  schemas:
+    WibTime:
+      type: string
+      format: date-time
+      description: WIB wall-clock time written with a Z (do not add 7 hours).
+      example: '2026-10-27T09:15:00Z'
+    Envelope:
+      type: object
+      description: familabs answer envelope; empty fields are left out.
+      properties:
+        code: {type: integer, example: 200}
+        status: {type: string, enum: [success, failure]}
+        message: {type: string, description: HTTP status text on errors; the service name on the health check}
+        data: {description: The answer}
+        errors:
+          type: object
+          additionalProperties: {type: string}
+          description: '{"error": "..."} or one entry per invalid field (422)'
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        per_page: {type: integer}
+      required: [code]
+    ListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          description: total / page / per_page are present only when total > 0.
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            status: {type: string, enum: [failure]}
+    StatusCount:
+      type: object
+      properties:
+        task_status: {type: string, example: WAITING_DEPT_HEAD}
+        count: {type: integer, format: int64}
+    TaskStatus:
+      type: string
+      enum: [DRAFT, WAITING_DEPT_HEAD, WAITING_DIV_HEAD, HOLD_DEPT_HEAD, HOLD_DIV_HEAD, REVISION, REJECTED, COMPLETED, CANCELLED]
+    TaskRow:
+      type: object
+      properties:
+        task_id: {type: string}
+        site_id: {type: string}
+        site_name_1: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        created_by: {type: integer, format: int64}
+        updated_by: {type: integer, format: int64}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        updated_at: {$ref: '#/components/schemas/WibTime'}
+        submit_count: {type: integer, description: 'Times sent; > 1 = "Pernah dikirim sebelumnya". Left out on old rows.'}
+        rejected_by_role: {type: string, description: For REVISION / REJECTED - the role that returned it. Left out otherwise.}
+    TaskHistory:
+      type: object
+      properties:
+        id: {type: integer}
+        action:
+          type: string
+          enum: [CREATE, UPDATE, SUBMIT, RESUBMIT, APPROVE, REJECT, REVISION, FORWARD, COMPLETE, HOLD, RELEASE, CANCEL, DUPLICATE_CONFIRMED]
+        actor_id: {type: integer, format: int64}
+        notes: {type: string, example: Site diajukan oleh Uji Staf Satu untuk proses approval}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        actor_role: {type: string, description: Role at that moment; left out on old rows}
+        round: {type: integer, description: Submit round; left out on old rows}
+    ApprovalLevel:
+      type: object
+      properties:
+        id: {type: integer}
+        level: {type: integer, example: 1}
+        approver_role_id: {type: string, example: DEPT_HEAD}
+        approver_id: {type: integer, format: int64}
+        approver_name: {type: string}
+        status: {type: string, enum: [WAITING, PENDING, APPROVED, REJECTED, REVISION, HOLD]}
+        notes: {type: string}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        acted_at: {allOf: [{$ref: '#/components/schemas/WibTime'}], nullable: true}
+    TaskAttachment:
+      type: object
+      properties:
+        id: {type: integer}
+        file_name: {type: string}
+        file_url: {type: string}
+        uploaded_by: {type: integer, format: int64}
+        uploaded_at: {$ref: '#/components/schemas/WibTime'}
+    TaskSection:
+      type: object
+      properties:
+        task_id: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        approval: {type: array, items: {$ref: '#/components/schemas/ApprovalLevel'}}
+        history: {type: array, items: {$ref: '#/components/schemas/TaskHistory'}}
+        submit_count: {type: integer}
+        rejected_by_role: {type: string}
+    TaskDetail:
+      type: object
+      properties:
+        site: {$ref: '#/components/schemas/Site'}
+        context: {allOf: [{$ref: '#/components/schemas/SiteContext'}], nullable: true}
+        task: {$ref: '#/components/schemas/TaskSection'}
+        attachment: {type: array, items: {$ref: '#/components/schemas/TaskAttachment'}}
+    Site:
+      type: object
+      properties:
+        site_id: {type: string, example: ST20261027000001}
+        site_name_1: {type: string, example: Uji Kemang Raya}
+        site_name_2: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        site_postal_code: {type: string}
+        site_district: {type: string}
+        site_city: {type: string}
+        site_region: {type: string}
+        site_lat: {type: number, format: double}
+        site_lon: {type: number, format: double}
+        site_telepon: {type: string}
+        site_telepon_ext: {type: string}
+        site_mobile_phone: {type: string}
+        site_pic: {type: string, description: owner / contact name}
+        site_fax: {type: string}
+        site_planned_opening_date: {type: string, description: 'YYYY-MM-DD or ""', example: '2027-03-01'}
+        site_sales_area: {type: number, description: m2}
+        site_selling_alcohol: {type: boolean}
+        site_open_24_hours: {type: boolean}
+        created_by: {type: integer, format: int64}
+        created_by_name: {type: string, description: left out when empty}
+        updated_by: {type: integer, format: int64, nullable: true}
+        updated_by_name: {type: string, description: left out when empty}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        updated_at: {allOf: [{$ref: '#/components/schemas/WibTime'}], nullable: true}
+    SiteInput:
+      type: object
+      required: [site_name_1]
+      description: 'To SEND, only site_name_1, site_lat/site_lon (valid, not 0,0) and site_sales_area (> 0) are needed.'
+      properties:
+        site_id: {type: string, description: empty = new site}
+        site_name_1: {type: string, description: Nama site / Nama lokasi}
+        site_name_2: {type: string}
+        site_address_1: {type: string, description: Jalan dan nomor}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        site_postal_code: {type: string}
+        site_district: {type: string, description: kecamatan}
+        site_city: {type: string}
+        site_region: {type: string, description: provinsi}
+        site_lat: {type: number, format: double, minimum: -90, maximum: 90}
+        site_lon: {type: number, format: double, minimum: -180, maximum: 180}
+        site_telepon: {type: string}
+        site_telepon_ext: {type: string}
+        site_mobile_phone: {type: string}
+        site_pic: {type: string}
+        site_fax: {type: string}
+        site_planned_opening_date: {type: string, format: date, description: 'YYYY-MM-DD or ""'}
+        site_sales_area: {type: number, description: Sales Area in m2}
+        site_selling_alcohol: {type: boolean}
+        site_open_24_hours: {type: boolean}
+    PreviewSiteInput:
+      type: object
+      required: [site_lat, site_lon]
+      properties:
+        site_name_1: {type: string}
+        site_name_2: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        site_postal_code: {type: string}
+        site_district: {type: string}
+        site_city: {type: string}
+        site_region: {type: string}
+        site_lat: {type: number, format: double, description: required, not 0}
+        site_lon: {type: number, format: double, description: required, not 0}
+        site_planned_opening_date: {type: string, format: date}
+        site_sales_area: {type: number}
+        site_selling_alcohol: {type: boolean}
+        site_open_24_hours: {type: boolean}
+    SiteUpsertInput:
+      type: object
+      required: [site]
+      properties:
+        site: {$ref: '#/components/schemas/SiteInput'}
+        context: {allOf: [{$ref: '#/components/schemas/SiteContextInput'}], nullable: true, description: survey; null / missing = not changed}
+        attachment:
+          type: array
+          description: photos already uploaded with POST /v1/upload/add; when sent, replaces all
+          items:
+            type: object
+            required: [file_name, path]
+            properties:
+              file_name: {type: string}
+              path: {type: string}
+        notes: {type: string, maxLength: 500, description: history note (optional)}
+        insight: {allOf: [{$ref: '#/components/schemas/AIInsight'}], nullable: true, description: an insight from preview, stored as is}
+        confirm_duplicate: {type: boolean, description: 'send anyway after a 409 DUPLICATE_NEARBY'}
+        generate_ai: {type: boolean, nullable: true, description: 'true = make AI after saving; false = never; missing = server switch'}
+    SiteUpsertResult:
+      type: object
+      properties:
+        site: {$ref: '#/components/schemas/Site'}
+        context: {$ref: '#/components/schemas/SiteContext'}
+        attachments:
+          type: array
+          items:
+            type: object
+            properties:
+              site_attachment_id: {type: integer}
+              file_name: {type: string}
+              path: {type: string}
+              created_at: {$ref: '#/components/schemas/WibTime'}
+        task: {$ref: '#/components/schemas/TaskDetail'}
+    SiteContextInput:
+      type: object
+      description: The whole survey at once; replaces fields and both lists.
+      properties:
+        foot_traffic_observation: {type: string, description: orang lewat per hari}
+        peak_hours: {type: string, description: jam ramai}
+        parking_availability: {type: string, enum: [AVAILABLE, LIMITED, NONE, ''], description: '"" = not filled'}
+        public_transport: {type: string}
+        anchor_landmark: {type: string}
+        observed_demographics: {type: string, description: penduduk sekitar}
+        competitors:
+          type: array
+          items:
+            type: object
+            required: [competitor_name]
+            properties:
+              competitor_name: {type: string}
+              competitor_type: {type: string}
+              distance: {type: string, example: 150 m}
+        custom_notes:
+          type: array
+          items:
+            type: object
+            required: [title]
+            properties:
+              title: {type: string}
+              content: {type: string}
+        vehicle_traffic_level: {type: string, enum: [QUIET, MODERATE, BUSY, VERY_BUSY, ''], description: 'Sepi / Sedang / Ramai / Sangat ramai; optional'}
+        vehicle_traffic_count: {type: integer, minimum: 0, maximum: 99999, nullable: true, description: vehicles counted; needs vehicle_traffic_minutes}
+        vehicle_traffic_minutes: {type: integer, minimum: 1, maximum: 120, nullable: true}
+        vehicle_traffic_note: {type: string, maxLength: 300}
+        parking_note: {type: string, maxLength: 300}
+        competitor_note: {type: string, maxLength: 500}
+    SiteContext:
+      type: object
+      properties:
+        site_id: {type: string}
+        foot_traffic_observation: {type: string}
+        peak_hours: {type: string}
+        parking_availability: {type: string}
+        public_transport: {type: string}
+        anchor_landmark: {type: string}
+        observed_demographics: {type: string}
+        competitors:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              competitor_name: {type: string}
+              competitor_type: {type: string}
+              distance: {type: string}
+        custom_notes:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              title: {type: string}
+              content: {type: string}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        updated_at: {$ref: '#/components/schemas/WibTime'}
+        vehicle_traffic_level: {type: string, description: left out when empty}
+        vehicle_traffic_count: {type: integer, description: left out when empty}
+        vehicle_traffic_minutes: {type: integer, description: left out when empty}
+        vehicle_traffic_note: {type: string, description: left out when empty}
+        parking_note: {type: string, description: left out when empty}
+        competitor_note: {type: string, description: left out when empty}
+    CancelInput:
+      type: object
+      properties:
+        notes: {type: string, maxLength: 500, description: optional reason}
+    DecisionInput:
+      type: object
+      required: [decision]
+      properties:
+        decision: {type: string, enum: [APPROVE, REJECT, REVISION, HOLD, RELEASE]}
+        notes: {type: string, maxLength: 500, description: 'catatan; required only for HOLD (alasan)'}
+    PendingApproval:
+      type: object
+      properties:
+        approval_detail_id: {type: integer}
+        task_id: {type: string}
+        site_id: {type: string}
+        site_name_1: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        created_by: {type: integer, format: int64}
+        created_by_name: {type: string}
+        level: {type: integer}
+        submitted_at: {$ref: '#/components/schemas/WibTime'}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        submit_count: {type: integer, description: '> 1 = "Pernah dikirim sebelumnya"'}
+    ApprovalHistoryRow:
+      type: object
+      properties:
+        approval_detail_id: {type: integer}
+        task_id: {type: string}
+        site_id: {type: string}
+        site_name_1: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_address_3: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        created_by: {type: integer, format: int64}
+        created_by_name: {type: string}
+        level: {type: integer}
+        status: {type: string, enum: [APPROVED, REJECTED, REVISION, HOLD]}
+        notes: {type: string}
+        acted_at: {allOf: [{$ref: '#/components/schemas/WibTime'}], nullable: true}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        rejected_by_role: {type: string}
+    NearbyRequest:
+      type: object
+      properties:
+        site_id: {type: string}
+        site_name: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        owner_id: {type: integer, format: int64}
+        owner_name: {type: string}
+        lat: {type: number}
+        lng: {type: number}
+        distance_m: {type: integer}
+    UserProfile:
+      type: object
+      properties:
+        user_id: {type: integer, format: int64}
+        nik: {type: string}
+        username: {type: string}
+        role: {type: string, enum: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]}
+    AIMetric:
+      type: object
+      properties:
+        label: {type: string}
+        score: {type: integer, minimum: 0, maximum: 100}
+        band: {type: string}
+        summary: {type: string}
+        factors: {type: array, items: {type: string}}
+    AIInsight:
+      type: object
+      description: Gemini's location score. JSON names in camelCase (as site-dev-api).
+      properties:
+        site_ai_id: {type: integer, format: int64}
+        site_id: {type: string}
+        overallScore: {type: integer, description: 'round(0.18 x the 5 main metrics + 0.10 x vehicleTraffic)'}
+        recommendation: {type: string}
+        headline: {type: string}
+        narrative: {type: string}
+        metrics:
+          type: object
+          properties:
+            footTraffic: {$ref: '#/components/schemas/AIMetric'}
+            demographics: {$ref: '#/components/schemas/AIMetric'}
+            competition: {$ref: '#/components/schemas/AIMetric'}
+            accessibility: {$ref: '#/components/schemas/AIMetric'}
+            economic: {$ref: '#/components/schemas/AIMetric'}
+            vehicleTraffic: {allOf: [{$ref: '#/components/schemas/AIMetric'}], description: Lalu Lintas Kendaraan; left out on old insights}
+        competitors:
+          type: array
+          items:
+            type: object
+            properties:
+              name: {type: string}
+              distanceKm: {type: number}
+              type: {type: string}
+        risks:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string}
+              severity: {type: string}
+              mitigation: {type: string}
+        opportunities: {type: array, items: {type: string}}
+        confidenceLevel: {type: string}
+        confidenceReason: {type: string}
+        dataAssumptions: {type: array, items: {type: string}}
+        contextWarnings:
+          type: array
+          items:
+            type: object
+            properties:
+              field: {type: string}
+              userClaim: {type: string}
+              aiExpectation: {type: string}
+              severity: {type: string}
+              message: {type: string}
+        generatedAt: {$ref: '#/components/schemas/WibTime'}
+        data_source: {type: string, enum: [gemini, gemini+google, gemini+osm, gemini+mixed], description: 'map data the AI got; only on a fresh answer while [places] is on'}
+        measured: {type: object, description: 'the map data given to Gemini (counts, examples, nearest FamilyMart); only on a fresh answer'}
+    AIQuota:
+      type: object
+      properties:
+        limit: {type: integer, description: my analyses per day}
+        remaining: {type: integer}
+        site: {$ref: '#/components/schemas/LimitCount'}
+        server_today: {$ref: '#/components/schemas/LimitCount'}
+    LimitCount:
+      type: object
+      description: present only while that limit is on
+      properties:
+        limit: {type: integer}
+        used: {type: integer}
+        remaining: {type: integer}
+    MapPoint:
+      type: object
+      properties:
+        store_code: {type: string}
+        store_name: {type: string}
+        store_type_name: {type: string}
+        site_type: {type: string, description: '"Site Active" (store) or "Site Requested"'}
+        longitude: {type: number}
+        latitude: {type: number}
+        opening_store_dt: {type: string, nullable: true}
+        task_status: {type: string, description: requested sites only}
+    NearbyArea:
+      type: object
+      properties:
+        source: {type: string, enum: [google, osm, mixed]}
+        lat: {type: number}
+        lng: {type: number}
+        radius_m: {type: integer}
+        fetched_at: {type: string, format: date-time}
+        places:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string, description: 'g:<place_id> or o:<type>/<id>'}
+              name: {type: string}
+              category: {type: string, enum: [competitor, office, school, university, apartment]}
+              brand: {type: string, description: competitors only, e.g. indomaret}
+              lat: {type: number}
+              lng: {type: number}
+              distance_m: {type: integer}
+              source: {type: string}
+              place_id: {type: string}
+        categories:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              count: {type: integer}
+              source: {type: string}
+              capped: {type: boolean, description: 'the source cut the list; real number may be higher'}
+              complete_within_m: {type: integer}
+        google_calls: {type: integer, description: Google calls made for this answer (0 when cached)}
+        cached: {type: boolean}
+        fallback_reason: {type: string}
+        nearest_familymart:
+          type: object
+          nullable: true
+          properties:
+            name: {type: string}
+            code: {type: string}
+            distance_m: {type: integer}
+            within_1km: {type: integer}
+        store_source: {type: string, example: real}
+        attribution: {type: string}
+    ActivityRow:
+      type: object
+      properties:
+        id: {type: integer}
+        task_id: {type: string}
+        site_id: {type: string}
+        site_name_1: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        action: {type: string, enum: [SUBMIT, RESUBMIT, APPROVE, REVISION, HOLD, RELEASE, REJECT, CANCEL]}
+        actor_id: {type: integer, format: int64}
+        actor_name: {type: string}
+        actor_role: {type: string}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        round: {type: integer}
+        needs_action: {type: boolean}
+        unread: {type: boolean}
+        notice: {type: string, enum: [DIV_HEAD_RETURNED], description: 'Dept Head only ("Untuk Anda"); left out otherwise'}
+    SiteAds:
+      type: object
+      properties:
+        ads_value: {type: integer, format: int64, nullable: true, description: Rupiah per day}
+        ads_note: {type: string}
+        updated_by_name: {type: string}
+        updated_at: {allOf: [{$ref: '#/components/schemas/WibTime'}], nullable: true}
+    PortalRow:
+      type: object
+      properties:
+        site_id: {type: string}
+        task_id: {type: string}
+        site_name_1: {type: string}
+        site_address_1: {type: string}
+        site_address_2: {type: string}
+        site_district: {type: string}
+        site_city: {type: string}
+        site_region: {type: string}
+        site_postal_code: {type: string}
+        site_lat: {type: number}
+        site_lon: {type: number}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        status_group: {type: string, enum: [WAITING_DEPT_HEAD, WAITING_DIV_HEAD, HOLD, APPROVED, REJECTED]}
+        hold_note: {type: string, description: HOLD only}
+        created_by: {type: integer, format: int64}
+        created_by_name: {type: string}
+        created_by_nik: {type: string}
+        submitted_at: {allOf: [{$ref: '#/components/schemas/WibTime'}], nullable: true}
+        updated_at: {$ref: '#/components/schemas/WibTime'}
+        ads: {allOf: [{$ref: '#/components/schemas/SiteAds'}], nullable: true}
+    PortalReport:
+      type: object
+      properties:
+        site:
+          allOf:
+            - $ref: '#/components/schemas/Site'
+            - type: object
+              properties:
+                created_by_nik: {type: string}
+        context: {allOf: [{$ref: '#/components/schemas/SiteContext'}], nullable: true}
+        task: {$ref: '#/components/schemas/TaskSection'}
+        attachment: {type: array, items: {$ref: '#/components/schemas/TaskAttachment'}}
+        insight: {allOf: [{$ref: '#/components/schemas/AIInsight'}], nullable: true}
+        staff_note: {type: string}
+        ads: {allOf: [{$ref: '#/components/schemas/SiteAds'}], nullable: true}
+        status_group: {type: string, nullable: true}
+    CompetitorBrand:
+      type: object
+      properties:
+        slug: {type: string, example: indomaret}
+        name: {type: string, example: Indomaret}
+        patterns: {type: array, items: {type: string}, description: name patterns (regular expressions)}
+        logo_url: {type: string, example: /brands/indomaret.svg}
+        color: {type: string, example: '#1a4b9b'}
+        type: {type: string, enum: [minimarket, coffee]}
+        legacy_type: {type: string, example: Mini Market}
+        active: {type: boolean}
+        placeholder: {type: boolean, description: logo is a placeholder}
+        sort: {type: integer}
+    WilayahRow:
+      type: object
+      properties:
+        village_code: {type: string}
+        village_name: {type: string}
+        village_type: {type: string}
+        postal_code: {type: string}
+        district_code: {type: string}
+        district_name: {type: string}
+        regency_code: {type: string}
+        regency_name: {type: string}
+        province_code: {type: string}
+        province_name: {type: string}
+    ProvinceTree:
+      type: object
+      properties:
+        province_code: {type: string}
+        province_name: {type: string}
+        regencies:
+          type: array
+          items:
+            type: object
+            properties:
+              regency_code: {type: string}
+              regency_name: {type: string}
+              districts:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    district_code: {type: string}
+                    district_name: {type: string}
+                    villages:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          village_code: {type: string}
+                          village_name: {type: string}
+                          village_type: {type: string}
+                          postal_code: {type: string}
+    DashboardHistoryRow:
+      type: object
+      properties:
+        id: {type: integer}
+        task_id: {type: string}
+        site_id: {type: string}
+        site_name_1: {type: string}
+        task_status: {$ref: '#/components/schemas/TaskStatus'}
+        action: {type: string}
+        actor_id: {type: integer, format: int64}
+        actor_name: {type: string}
+        notes: {type: string}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+    User:
+      type: object
+      properties:
+        user_id: {type: integer, format: int64, description: NIK}
+        username: {type: string}
+        email: {type: string}
+        role_id: {type: string}
+        role_name: {type: string}
+        ai_insight_remaining: {type: integer}
+        ai_insight_limit: {type: integer}
+        geocoding_remaining: {type: integer}
+        geocoding_limit: {type: integer}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        updated_at: {$ref: '#/components/schemas/WibTime'}
+    ApprovalMatrixRow:
+      type: object
+      properties:
+        id: {type: integer}
+        role_id: {type: string}
+        role_name: {type: string}
+        role_level: {type: integer}
+        user_id: {type: integer, format: int64}
+        username: {type: string}
+        is_active: {type: boolean}
+        created_at: {$ref: '#/components/schemas/WibTime'}
+        updated_at: {$ref: '#/components/schemas/WibTime'}
+    Limits:
+      type: object
+      properties:
+        ai_insight_daily_quota: {type: integer}
+        ai_insight_updated_by: {type: integer, format: int64}
+        ai_insight_updated_by_name: {type: string}
+        ai_insight_updated_at: {$ref: '#/components/schemas/WibTime'}
+        geocoding_daily_quota: {type: integer}
+        geocoding_updated_by: {type: integer, format: int64}
+        geocoding_updated_by_name: {type: string}
+        geocoding_updated_at: {$ref: '#/components/schemas/WibTime'}

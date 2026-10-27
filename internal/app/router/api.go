@@ -26,4 +26,6 @@ func init() {
 	handlers["activity"] = &handler.ActivityHandler{}
 	handlers["competitor-brands"] = &handler.CompetitorBrandHandler{}
 	handlers["portal/site"] = &handler.PortalHandler{}
+	// API docs page, only when [docs] enabled = true (default off)
+	handlers["docs"] = &handler.DocsHandler{}
 }

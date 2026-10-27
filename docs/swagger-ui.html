@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Site Dev API docs</title>
+  <!-- Swagger UI 5.17.14, pinned (swagger-ui-dist on jsDelivr); no Go library -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css" crossorigin="anonymous">
+  <style>
+    body { margin: 0; background: #fafafa; }
+    .sitedev-banner { font: 14px/1.4 system-ui, sans-serif; background: #1e4ea3; color: #fff; padding: 10px 16px; }
+    .sitedev-banner b { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="sitedev-banner"><b>Site Dev API</b> &middot; test environment only. Press <b>Authorize</b>, paste a test token (without "Bearer"), then "Try it out".</div>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin="anonymous"></script>
+  <script>
+    // openapi.yaml lives next to this page: /v1/docs -> /v1/docs/openapi.yaml
+    var base = window.location.pathname.replace(/\/+$/, "");
+    window.ui = SwaggerUIBundle({
+      url: base + "/openapi.yaml",
+      dom_id: "#swagger-ui",
+      deepLinking: true,
+      docExpansion: "none",
+      tagsSorter: null,
+      displayRequestDuration: true,
+      tryItOutEnabled: false,
+      persistAuthorization: false
+    });
+  </script>
+</body>
+</html>
