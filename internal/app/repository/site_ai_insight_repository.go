@@ -64,8 +64,9 @@ func (r *SiteAIInsightRepository) GetLatestBySiteID(ctx context.Context, siteID 
 
 	insight = &model.SiteAIInsight{}
 	// newest stored first (with history, Wes 27 Oct); was GeneratedAt DESC
-	// with one row per site
-	if err = db.Where("SiteID = ?", siteID).Order("SiteAIID DESC").First(insight).Error; err != nil {
+	// with one row per site. Take, not First: First appends the primary key
+	// to ORDER BY and SQL Server refuses a column twice there.
+	if err = db.Where("SiteID = ?", siteID).Order("SiteAIID DESC").Take(insight).Error; err != nil {
 		span.RecordError(err)
 		insight = nil
 		return

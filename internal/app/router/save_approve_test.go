@@ -187,7 +187,7 @@ func TestSideBySide_SaveNewSiteAndSubmit(t *testing.T) {
 	assert.Equal(t, `SELECT * FROM "SystemSettings" WHERE SettingKey = 'ai_insight.daily_quota' ORDER BY "SystemSettings"."ID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`, sqls[25])
 	// DIFFERENCE (Wes, 27 Oct): earlier insights are kept (no DELETE); the
 	// newest is read first (no re-run on the same inputs)
-	assert.Contains(t, sqls, `SELECT * FROM "SiteAIInsights" WHERE SiteID = '`+siteID+`' ORDER BY SiteAIID DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`)
+	assert.Contains(t, sqls, `SELECT * FROM "SiteAIInsights" WHERE SiteID = '`+siteID+`' ORDER BY SiteAIID DESC OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`)
 	assert.NotContains(t, strings.Join(sqls, "\n"), `DELETE FROM "SiteAIInsights"`)
 	assert.Equal(t, `SELECT * FROM "SiteAttachments" WHERE SiteID = '`+siteID+`' ORDER BY SiteAttachmentID ASC`, sqls[len(sqls)-1])
 

@@ -151,7 +151,7 @@ func TestSideBySide_GenerateAIInsight(t *testing.T) {
 		// = no re-run); no DELETE (earlier insights kept as history); 3 new
 		// columns (reason + breakdown NULL: this mock answer has the old
 		// shape)
-		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`INSERT INTO "SiteAIInsights" ("SiteID","OverallScore","Recommendation","Headline","Narrative","ConfidenceLevel","ConfidenceReason","GeminiModel","GeneratedBy","GeneratedAt","CreatedAt","ScoreReason","ScoreBreakdown","InputHash") OUTPUT INSERTED."SiteAIID" VALUES ('ST1',74,'Recommended','Toko Kemang — Recommended (74/100)','Layak.','medium','survey parsial','gemini-2.5-flash',1001,'<time>','<time>',NULL,NULL,'<hash>');`,
 		`INSERT INTO "SiteAIMetrics" ("SiteAIID","MetricKey","Label","Score","Band","Summary","Factors","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'footTraffic','Foot',80,'good','Foot ok','a;b','<time>'),(77,'demographics','Demo',70,'good','Demo ok','a;b','<time>'),(77,'competition','Comp',60,'good','Comp ok','a;b','<time>'),(77,'accessibility','Akses',85,'good','Akses ok','a;b','<time>'),(77,'economic','Eko',75,'good','Eko ok','a;b','<time>');`,
 		`INSERT INTO "SiteAIRisks" ("SiteAIID","Title","Severity","Mitigation","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'Parkir','moderate','sewa lahan','<time>');`,
@@ -223,7 +223,7 @@ func TestSideBySide_GetAIInsight(t *testing.T) {
 	assertSameJSON(t, oldDataEnvelope(t, want), body)
 	assert.Equal(t, []string{
 		// DIFFERENCE (Wes, 27 Oct): newest = last stored (history kept)
-		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT * FROM "SiteAIMetrics" WHERE SiteAIID = 77 ORDER BY ID ASC`,
 		`SELECT * FROM "SiteAIRisks" WHERE SiteAIID = 77 ORDER BY ID ASC`,
 		`SELECT * FROM "SiteAIOpportunities" WHERE SiteAIID = 77 ORDER BY ID ASC`,
