@@ -212,6 +212,7 @@ func (h TaskHandler) PreviewAIInsight(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
+	req.SiteID = constants.SiteIDFromPath(req.SiteID)
 	ctx.ResponseData, err = h.ServicesAIInsight.Preview(ctx.Request().Context(), req, userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()

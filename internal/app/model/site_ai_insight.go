@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// SiteAIInsight is the current Gemini insight of a site (one per site; a new
-// one replaces the old, no history). Metrics, risks, opportunities, data
+// SiteAIInsight is one Gemini insight of a site. Since 27 Oct (Wes) a new
+// one is added and the older ones stay as history; the newest (highest
+// SiteAIID) is the one shown and sent. Metrics, risks, opportunities, data
 // assumptions and context warnings are child tables; competitors are not
 // stored (they come from SiteCompetitors).
 type SiteAIInsight struct {
@@ -26,6 +27,9 @@ type SiteAIInsight struct {
 	// server computed it (JSON of dto.AIScoreBreakdown); NULL on older rows
 	ScoreReason    *string `gorm:"column:ScoreReason" json:"score_reason"`
 	ScoreBreakdown *string `gorm:"column:ScoreBreakdown" json:"score_breakdown"`
+	// InputHash (Wes, 27 Oct, new column): fingerprint of the AI inputs it
+	// was made from (aiInputHash); a re-run with the same inputs is refused
+	InputHash *string `gorm:"column:InputHash" json:"input_hash"`
 }
 
 func (SiteAIInsight) TableName() string {

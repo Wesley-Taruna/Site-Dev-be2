@@ -742,11 +742,15 @@ paths:
   /v1/task/ai-insight:
     post:
       tags: [AI Insight]
-      summary: Make a new AI analysis for a saved site (replaces the old one)
+      summary: Make a new AI analysis for a saved site (newest is shown; earlier ones kept)
       description: |
         Roles - all (the app shows it to staff). One Gemini call (~20-30 s). Counts against the limits:
         per staff per day, per site location (~110 m, all users, all rounds) and per day for everyone.
         Only answered calls count. AI off on this server = 503. Empty survey = 400 (baru, 27 Okt).
+        Re-run (baru, 27 Okt): staff can make it again after "Tolak, bisa direvisi" or on a reopened draft. When the
+        site's saved inputs are exactly those of its newest insight (`input_hash`) the answer is **409**
+        "Data belum berubah sejak analisis terakhir." (no Gemini call, nothing counted). A new result is ADDED;
+        earlier ones stay in the database as history; `GET /v1/task/ai-insight/{site_id}` returns the newest.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiGenerate
       requestBody:
@@ -771,6 +775,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '400': {$ref: '#/components/responses/AIEmptyInputs'}
         '403': {$ref: '#/components/responses/NoToken'}
+        '409': {$ref: '#/components/responses/AIUnchanged'}
         '422':
           description: site_id missing
           content:
@@ -789,6 +794,9 @@ paths:
         Roles - all. Same limits as generate. Send the answer back later as `insight` in
         `POST /v1/task/{status}` to store it without a second Gemini call. Only `site.site_lat`/`site_lon` are required,
         plus at least one survey input in `context` (else 400, baru 27 Okt).
+        Revising a returned request or a reopened draft: send its `site_id` (baru, 27 Okt); when the form's inputs
+        equal those of the site's newest insight the answer is 409 (no call). Send the answer's `input_hash` back
+        inside `insight` on save so the next check knows the inputs.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiPreview
       requestBody:
@@ -798,6 +806,7 @@ paths:
             schema:
               type: object
               properties:
+                site_id: {type: string, description: '(baru, 27 Okt, optional) the saved request being revised / the reopened draft', example: SD27/10/2026001}
                 site: {$ref: '#/components/schemas/PreviewSiteInput'}
                 context: {$ref: '#/components/schemas/SiteContextInput'}
             example:
@@ -816,6 +825,7 @@ paths:
         '401': {$ref: '#/components/responses/Unauthorized'}
         '400': {$ref: '#/components/responses/AIEmptyInputs'}
         '403': {$ref: '#/components/responses/NoToken'}
+        '409': {$ref: '#/components/responses/AIUnchanged'}
         '422':
           description: Coordinates missing (0)
           content:
@@ -863,7 +873,7 @@ paths:
   /v1/task/ai-insight/{site_id}:
     get:
       tags: [AI Insight]
-      summary: The stored AI analysis of a site
+      summary: The newest stored AI analysis of a site (what approvers see)
       description: Roles - all. A site without an analysis answers 500 `record not found` (old behaviour; the app shows "Belum ada analisis AI").
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiGet
@@ -1981,7 +1991,7 @@ paths:
     post:
       tags: [Background jobs]
       summary: Make a queued AI analysis
-      description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`, except an empty survey (nothing to analyse) answers 200 so the queue does not retry.
+      description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`, except an empty survey or unchanged inputs (nothing new to analyse) answer 200 so the queue does not retry.
       x-roles: [job-service]
       operationId: queueAIInsight
       security:
@@ -2284,6 +2294,15 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}
           example: {code: 400, status: failure, message: Bad Request, errors: {error: 'Analisis AI belum bisa dibuat: data survei masih kosong. Isi minimal satu: keramaian orang lewat, jam ramai, lalu lintas kendaraan, parkir, transportasi umum, landmark sekitar, penduduk sekitar, catatan kompetitor, atau catatan tambahan.'}}
+    AIUnchanged:
+      description: |
+        (baru, 27 Okt) The inputs (pin, address parts, sales area, 24 h / alcohol, survey, competitor rows, notes;
+        not the name) are the same as for the site's newest AI result: no new call, nothing counted. Show the text and
+        keep the current result. There is no "force" option.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+          example: {code: 409, status: failure, message: Conflict, errors: {error: Data belum berubah sejak analisis terakhir. Ubah data survei atau lokasi dulu untuk membuat analisis baru.}}
     AILimit:
       description: An AI limit is reached (per staff per day, per site location, or per day for everyone)
       content:
@@ -2757,6 +2776,7 @@ components:
             risk_penalty: {type: integer, description: 'high 4 / moderate 2 / low 1 per risk, max 10'}
             opportunity_bonus: {type: integer, description: '0-5'}
           example: {base: 75, risk_penalty: 2, opportunity_bonus: 1}
+        input_hash: {type: string, description: '(baru, 27 Okt) fingerprint (sha256 hex) of the inputs this result was made from; send it back inside `insight` on save. Left out on older insights.'}
     AIQuota:
       type: object
       properties:

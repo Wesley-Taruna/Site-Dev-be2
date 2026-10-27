@@ -40,7 +40,7 @@ func TestAIInsightServicePersist_UsesSiteIDAndNoModel(t *testing.T) {
 	insights, tx := mocks.NewISiteAIInsightRepository(t), mocks.NewITransactionRepository(t)
 	s := &AIInsightService{opt: testOptions(), RepositorySiteAIInsight: insights, RepositoryTransaction: tx}
 	tx.On("Do", ctxAny, mock.Anything).Return(func(ctx context.Context, fn func(ctx context.Context) error) error { return fn(ctx) })
-	insights.On("Replace", ctxAny, mock.MatchedBy(func(r *model.SiteAIInsight) bool {
+	insights.On("Add", ctxAny, mock.MatchedBy(func(r *model.SiteAIInsight) bool {
 		return r.SiteID == "ST5" && r.GeminiModel == "" && r.GeneratedBy == 1001
 	})).Run(func(args mock.Arguments) { args.Get(1).(*model.SiteAIInsight).SiteAIID = 9 }).Return(nil)
 	insights.On("CreateMetrics", ctxAny, mock.MatchedBy(func(m []*model.SiteAIMetric) bool { return len(m) == 5 && m[0].SiteAIID == 9 })).Return(nil)

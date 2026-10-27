@@ -152,6 +152,11 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 		err = errAIInputsEmpty()
 		return
 	}
+	// Wes, 27 Oct: a re-run only when the inputs changed (nothing counted)
+	hash := aiInputHash(site, in.Context, in.Competitors, in.Notes)
+	if err = s.refuseUnchanged(ctx, siteID, hash); err != nil {
+		return
+	}
 	if err = s.holdLimits(ctx, &held, site.SiteLat, site.SiteLon); err != nil {
 		return
 	}
@@ -163,6 +168,7 @@ func (s *AIInsightService) generate(ctx context.Context, siteID string, actorID 
 	}
 	answered = true
 	s.markDataSource(&insight, in.Measured)
+	insight.InputHash = hash
 
 	var row *model.SiteAIInsight
 	if row, err = s.persist(ctx, &insight, geminiModel, actorID); err != nil {
@@ -206,10 +212,11 @@ func (s *AIInsightService) persist(ctx context.Context, insight *dto.AIInsightRe
 		GeneratedAt:      insight.GeneratedAt,
 		ScoreReason:      nilIfEmpty(insight.ScoreReason),
 		ScoreBreakdown:   breakdownJSON(insight.ScoreBreakdown),
+		InputHash:        nilIfEmpty(insight.InputHash),
 	}
 
 	err = s.RepositoryTransaction.Do(ctx, func(ctx context.Context) error {
-		if err := s.RepositorySiteAIInsight.Replace(ctx, row); err != nil {
+		if err := s.RepositorySiteAIInsight.Add(ctx, row); err != nil {
 			return err
 		}
 		if err := s.RepositorySiteAIInsight.CreateMetrics(ctx, metricRows(row.SiteAIID, insight.Metrics)); err != nil {
@@ -360,6 +367,9 @@ func (s *AIInsightService) get(ctx context.Context, siteID string) (res dto.AIIn
 	if insight.ScoreReason != nil {
 		res.ScoreReason = *insight.ScoreReason
 	}
+	if insight.InputHash != nil {
+		res.InputHash = *insight.InputHash
+	}
 	res.ScoreBreakdown = breakdownOf(insight.ScoreBreakdown)
 	for _, m := range metrics {
 		if m.MetricKey == constants.MetricKeyVehicleTraffic {
@@ -447,6 +457,13 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 	if !previewInputsFilled(req.Context) {
 		err = errAIInputsEmpty()
 	}
+	in := previewInput(req)
+	hash := aiInputHash(in.Site, in.Context, in.Competitors, in.Notes)
+	// a revised / reopened request: refused when its newest insight was
+	// made from the same inputs (Wes, 27 Oct)
+	if err == nil && req.SiteID != "" {
+		err = s.refuseUnchanged(ctx, req.SiteID, hash)
+	}
 	if err == nil {
 		err = s.holdUser(ctx, &held, actorID)
 	}
@@ -460,6 +477,26 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 		return
 	}
 
+	in.Measured = s.measuredFor(ctx, in.Site.SiteLat, in.Site.SiteLon)
+	res, _, err = s.askGemini(ctx, in)
+	if err == nil {
+		s.markDataSource(&res, in.Measured)
+		res.InputHash = hash
+	}
+	if err != nil {
+		// Gemini failed: the try is not counted
+		s.release(ctx, held)
+		span.RecordError(err)
+		s.opt.Logger.AddMessage(log.ErrorLevel, err)
+		res = dto.AIInsightResponseGet{}
+		return
+	}
+
+	return
+}
+
+// previewInput is the Gemini input of a preview body (nothing saved).
+func previewInput(req dto.AIInsightRequestPreview) client.GeminiInput {
 	in := client.GeminiInput{Site: &model.Site{
 		SiteName1:              req.Site.SiteName1,
 		SiteName2:              req.Site.SiteName2,
@@ -502,21 +539,20 @@ func (s *AIInsightService) Preview(ctx context.Context, req dto.AIInsightRequest
 		}
 	}
 
-	in.Measured = s.measuredFor(ctx, in.Site.SiteLat, in.Site.SiteLon)
-	res, _, err = s.askGemini(ctx, in)
-	if err == nil {
-		s.markDataSource(&res, in.Measured)
-	}
-	if err != nil {
-		// Gemini failed: the try is not counted
-		s.release(ctx, held)
-		span.RecordError(err)
-		s.opt.Logger.AddMessage(log.ErrorLevel, err)
-		res = dto.AIInsightResponseGet{}
-		return
-	}
+	return in
+}
 
-	return
+// refuseUnchanged: 409 when the site's newest insight was made from inputs
+// with this hash (no insight, or one without hash = go ahead).
+func (s *AIInsightService) refuseUnchanged(ctx context.Context, siteID string, hash string) error {
+	latest, err := s.RepositorySiteAIInsight.GetLatestBySiteID(ctx, siteID)
+	if err != nil {
+		return ignoreNotFound(err)
+	}
+	if latest.InputHash != nil && *latest.InputHash == hash {
+		return errAIInputsUnchanged()
+	}
+	return nil
 }
 
 func (s *AIInsightService) GetQuota(ctx context.Context, req dto.AIInsightQuotaRequestGet, actorID int64) (res dto.AIInsightQuotaResponse, err error) {

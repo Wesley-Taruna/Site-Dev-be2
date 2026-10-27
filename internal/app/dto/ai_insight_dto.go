@@ -84,6 +84,11 @@ func (r PreviewSiteRequest) Messages() map[string]string {
 // AIInsightRequestPreview is the body of POST /v1/task/ai-insight/preview:
 // site + survey not saved yet; nothing is stored.
 type AIInsightRequestPreview struct {
+	// SiteID (optional, Wes 27 Oct): the saved request being revised or a
+	// reopened draft; when its newest insight was made from exactly these
+	// inputs the preview answers 409 "Data belum berubah sejak analisis
+	// terakhir." without a Gemini call.
+	SiteID  string                    `json:"site_id,omitempty"`
 	Site    PreviewSiteRequest        `json:"site"`
 	Context *SiteContextRequestUpsert `json:"context"`
 }
@@ -164,6 +169,11 @@ type AIInsightResponseGet struct {
 	// ScoreBreakdown (Wes, 27 Oct): how the server computed overallScore;
 	// nil on older insights.
 	ScoreBreakdown *AIScoreBreakdown `json:"score_breakdown,omitempty"`
+	// InputHash (Wes, 27 Oct): fingerprint of the inputs the insight was
+	// made from. A client sends it back with the insight on save, so a
+	// later "Buat ulang" with the same inputs is refused (409) without a
+	// Gemini call. Left out on older insights.
+	InputHash string `json:"input_hash,omitempty"`
 	// DataSource / Measured (optional, local §6): which map data the AI got
 	// ("gemini+google", "gemini+osm", "gemini+mixed", or "gemini" when the
 	// lookup failed). Only on a fresh generate/preview while [places] is

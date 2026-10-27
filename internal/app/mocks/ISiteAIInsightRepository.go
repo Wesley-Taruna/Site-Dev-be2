@@ -17,8 +17,8 @@ type ISiteAIInsightRepository struct {
 	mock.Mock
 }
 
-// Replace provides a mock function with given fields: ctx, insight
-func (_m *ISiteAIInsightRepository) Replace(ctx context.Context, insight *model.SiteAIInsight) error {
+// Add provides a mock function with given fields: ctx, insight
+func (_m *ISiteAIInsightRepository) Add(ctx context.Context, insight *model.SiteAIInsight) error {
 	ret := _m.Called(ctx, insight)
 
 	var r0 error

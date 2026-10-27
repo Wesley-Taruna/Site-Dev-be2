@@ -10,11 +10,13 @@ import (
 )
 
 type ISiteAIInsightRepository interface {
-	// Replace deletes the site's insight (the database cascades to its child
-	// rows) and inserts insight; insight.SiteAIID is set afterwards.
-	Replace(ctx context.Context, insight *model.SiteAIInsight) (err error)
-	// GetLatestBySiteID returns the site's insight (gorm ErrRecordNotFound
-	// if none was generated).
+	// Add inserts a new insight of the site; earlier ones are kept as
+	// history (Wes, 27 Oct: re-run after a revision / on a reopened draft;
+	// was: delete + insert, one per site). insight.SiteAIID is set
+	// afterwards.
+	Add(ctx context.Context, insight *model.SiteAIInsight) (err error)
+	// GetLatestBySiteID returns the site's newest insight = the last one
+	// stored (highest SiteAIID; gorm ErrRecordNotFound if none).
 	GetLatestBySiteID(ctx context.Context, siteID string) (insight *model.SiteAIInsight, err error)
 
 	CreateMetrics(ctx context.Context, metrics []*model.SiteAIMetric) (err error)
@@ -40,16 +42,12 @@ func NewSiteAIInsightRepository() ISiteAIInsightRepository {
 	}
 }
 
-func (r *SiteAIInsightRepository) Replace(ctx context.Context, insight *model.SiteAIInsight) (err error) {
-	ctx, span := r.opt.Trace.Start(ctx, "SiteAIInsightRepository.Replace")
+func (r *SiteAIInsightRepository) Add(ctx context.Context, insight *model.SiteAIInsight) (err error) {
+	ctx, span := r.opt.Trace.Start(ctx, "SiteAIInsightRepository.Add")
 	defer span.End()
 
 	db := writeDB(ctx, r.opt)
 
-	if err = db.Where("SiteID = ?", insight.SiteID).Delete(new(model.SiteAIInsight)).Error; err != nil {
-		span.RecordError(err)
-		return
-	}
 	if err = db.Create(insight).Error; err != nil {
 		span.RecordError(err)
 		return
@@ -65,7 +63,9 @@ func (r *SiteAIInsightRepository) GetLatestBySiteID(ctx context.Context, siteID 
 	db := readDB(ctx, r.opt)
 
 	insight = &model.SiteAIInsight{}
-	if err = db.Where("SiteID = ?", siteID).Order("GeneratedAt DESC").First(insight).Error; err != nil {
+	// newest stored first (with history, Wes 27 Oct); was GeneratedAt DESC
+	// with one row per site
+	if err = db.Where("SiteID = ?", siteID).Order("SiteAIID DESC").First(insight).Error; err != nil {
 		span.RecordError(err)
 		insight = nil
 		return

@@ -8,6 +8,7 @@ package router
 import (
 	"database/sql/driver"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -135,17 +136,23 @@ func TestSideBySide_GenerateAIInsight(t *testing.T) {
 	code, body := call(t, h, http.MethodPost, "/v1/task/ai-insight", map[string]any{"site_id": "ST1"}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
-	assertSameJSON(t, oldDataEnvelope(t, oldGeminiInsight(77)), body)
+	// DIFFERENCE (Wes, 27 Oct): + input_hash (fingerprint of the inputs)
+	assertSameJSON(t, oldDataEnvelope(t, oldGeminiInsight(77)), withoutInputHash(t, body))
 	v, _ := redis.Get(quotaKey("ai_insight", 1001))
 	assert.Equal(t, "49", v, "one of 50 used")
 	sqls := stableSQL(rec.sqls)
+	for i := range sqls {
+		sqls[i] = hashLiteral.ReplaceAllString(sqls[i], "'<hash>'")
+	}
 	assert.Equal(t, []string{
 		`SELECT * FROM "SystemSettings" WHERE SettingKey = 'ai_insight.daily_quota' ORDER BY "SystemSettings"."ID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		oldDetailSQL[2], oldDetailSQL[5], oldDetailSQL[6], oldDetailSQL[7],
-		`DELETE FROM "SiteAIInsights" WHERE SiteID = 'ST1'`,
-		// DIFFERENCE (Wes, 27 Oct): 2 new columns, NULL for an insight
-		// without them (this mock answer has the old shape)
-		`INSERT INTO "SiteAIInsights" ("SiteID","OverallScore","Recommendation","Headline","Narrative","ConfidenceLevel","ConfidenceReason","GeminiModel","GeneratedBy","GeneratedAt","CreatedAt","ScoreReason","ScoreBreakdown") OUTPUT INSERTED."SiteAIID" VALUES ('ST1',74,'Recommended','Toko Kemang — Recommended (74/100)','Layak.','medium','survey parsial','gemini-2.5-flash',1001,'<time>','<time>',NULL,NULL);`,
+		// DIFFERENCE (Wes, 27 Oct): the newest insight is read (same inputs
+		// = no re-run); no DELETE (earlier insights kept as history); 3 new
+		// columns (reason + breakdown NULL: this mock answer has the old
+		// shape)
+		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		`INSERT INTO "SiteAIInsights" ("SiteID","OverallScore","Recommendation","Headline","Narrative","ConfidenceLevel","ConfidenceReason","GeminiModel","GeneratedBy","GeneratedAt","CreatedAt","ScoreReason","ScoreBreakdown","InputHash") OUTPUT INSERTED."SiteAIID" VALUES ('ST1',74,'Recommended','Toko Kemang — Recommended (74/100)','Layak.','medium','survey parsial','gemini-2.5-flash',1001,'<time>','<time>',NULL,NULL,'<hash>');`,
 		`INSERT INTO "SiteAIMetrics" ("SiteAIID","MetricKey","Label","Score","Band","Summary","Factors","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'footTraffic','Foot',80,'good','Foot ok','a;b','<time>'),(77,'demographics','Demo',70,'good','Demo ok','a;b','<time>'),(77,'competition','Comp',60,'good','Comp ok','a;b','<time>'),(77,'accessibility','Akses',85,'good','Akses ok','a;b','<time>'),(77,'economic','Eko',75,'good','Eko ok','a;b','<time>');`,
 		`INSERT INTO "SiteAIRisks" ("SiteAIID","Title","Severity","Mitigation","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'Parkir','moderate','sewa lahan','<time>');`,
 		`INSERT INTO "SiteAIOpportunities" ("SiteAIID","Opportunity","CreatedAt") OUTPUT INSERTED."ID" VALUES (77,'kampus','<time>');`,
@@ -215,7 +222,8 @@ func TestSideBySide_GetAIInsight(t *testing.T) {
 	want.Competitors = []oldAIInsightCompetitor{{Name: "Indomaret", DistanceKm: 0.05, Type: "minimarket"}, {Name: "Alfamart", DistanceKm: 0.12, Type: "minimarket"}}
 	assertSameJSON(t, oldDataEnvelope(t, want), body)
 	assert.Equal(t, []string{
-		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY GeneratedAt DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
+		// DIFFERENCE (Wes, 27 Oct): newest = last stored (history kept)
+		`SELECT * FROM "SiteAIInsights" WHERE SiteID = 'ST1' ORDER BY SiteAIID DESC,"SiteAIInsights"."SiteAIID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`SELECT * FROM "SiteAIMetrics" WHERE SiteAIID = 77 ORDER BY ID ASC`,
 		`SELECT * FROM "SiteAIRisks" WHERE SiteAIID = 77 ORDER BY ID ASC`,
 		`SELECT * FROM "SiteAIOpportunities" WHERE SiteAIID = 77 ORDER BY ID ASC`,
@@ -248,7 +256,7 @@ func TestSideBySide_PreviewAIInsight(t *testing.T) {
 	require.Equal(t, http.StatusOK, code, string(body))
 	want := oldGeminiInsight(0)
 	want.SiteID = ""
-	assertSameJSON(t, oldDataEnvelope(t, want), body)
+	assertSameJSON(t, oldDataEnvelope(t, want), withoutInputHash(t, body)) // DIFFERENCE: + input_hash (27 Oct)
 	for _, sql := range rec.sqls {
 		assert.False(t, strings.HasPrefix(sql, "INSERT") || strings.HasPrefix(sql, "DELETE"), "preview stores nothing: %s", sql)
 	}
@@ -306,4 +314,16 @@ func TestPreviewAIInsight_TrafficFieldsReachGemini(t *testing.T) {
 	}, 1001)
 
 	require.Equal(t, http.StatusOK, code, string(body))
+}
+
+var hashLiteral = regexp.MustCompile(`'[0-9a-f]{64}'`)
+
+// withoutInputHash drops the (27 Oct) input_hash from an insight answer,
+// after checking it is a sha256 hex.
+func withoutInputHash(t *testing.T, body []byte) []byte {
+	re := regexp.MustCompile(`,"input_hash":"([0-9a-f]+)"`)
+	m := re.FindSubmatch(body)
+	require.NotNil(t, m, "input_hash in %s", body)
+	assert.Len(t, m[1], 64)
+	return re.ReplaceAll(body, nil)
 }
