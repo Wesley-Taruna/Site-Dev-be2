@@ -160,8 +160,9 @@ const (
 	CompetitorNoteMax        = 500
 )
 
-// ID prefixes: Sites.SiteID = "ST" + YYYYMMDD + 6 digits, Tasks.TaskID =
-// "TS" + YYYYMMDD + 6 digits.
+// ID prefixes: Tasks.TaskID = "TS" + YYYYMMDD + 6 digits. SiteIDPrefix is
+// the OLD site ID ("ST" + YYYYMMDD + 6 digits, sites made before 27 Oct);
+// new sites get "SDdd/mm/yyyy" + 3 digits (site_id.go).
 const (
 	SiteIDPrefix = "ST"
 	TaskIDPrefix = "TS"

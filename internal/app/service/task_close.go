@@ -36,13 +36,13 @@ const (
 	msgNotesTooLong     = "Catatan maksimal 500 karakter."
 )
 
-// taskByAnyID reads a task by task_id ("TS…") or site_id ("ST…"); not
+// taskByAnyID reads a task by task_id ("TS…") or site_id ("SD…"/"ST…"); not
 // found = 404.
 func (s *TaskService) taskByAnyID(ctx context.Context, id string) (task *model.Task, err error) {
 	switch {
 	case strings.HasPrefix(id, constants.TaskIDPrefix):
 		task, err = s.RepositoryTask.GetByID(ctx, id)
-	case strings.HasPrefix(id, constants.SiteIDPrefix):
+	case constants.IsSiteID(id):
 		task, err = s.RepositoryTask.GetBySiteID(ctx, id)
 	default:
 		err = gorm.ErrRecordNotFound

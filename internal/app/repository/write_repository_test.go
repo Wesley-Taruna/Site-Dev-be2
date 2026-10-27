@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"site-dev-backend/internal/pkg/sqlfake"
 
@@ -22,10 +23,27 @@ func TestRunningIDRepository_DailyCounters(t *testing.T) {
 	b, _ := r.NextSiteID(ctx)
 	c, _ := r.NextTaskID(ctx)
 
-	assert.Equal(t, "ST"+today()+"000001", a)
-	assert.Equal(t, "ST"+today()+"000002", b)
+	// new site ID (Wes, 27 Oct): SD + dd/mm/yyyy + 3 digits; task ID unchanged
+	day := time.Now().In(jakartaLoc).Format("02/01/2006")
+	assert.Equal(t, "SD"+day+"001", a)
+	assert.Equal(t, "SD"+day+"002", b)
 	assert.Equal(t, "TS"+today()+"000001", c)
 	assert.Equal(t, int64(48*3600), int64(srv.TTL(fmt.Sprintf("site-dev-api:test:counter:site:%s:", today())).Seconds()))
+}
+
+// The site number grows past 3 digits instead of wrapping (1000th site of a
+// day = 4 digits).
+func TestRunningIDRepository_SiteIDFourDigits(t *testing.T) {
+	o, _ := fakeDBOptions(t)
+	srv := fakeRedis(t, &o)
+	r := &RunningIDRepository{opt: o}
+	srv.Set(fmt.Sprintf("site-dev-api:test:counter:site:%s:", today()), "999")
+
+	id, err := r.NextSiteID(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, "SD"+time.Now().In(jakartaLoc).Format("02/01/2006")+"1000", id)
+	assert.Len(t, id, 16, "fits Sites.SiteID varchar(20)")
 }
 
 func TestApprovalRepositoryUpdateDetailIfPending_RowsAffected(t *testing.T) {

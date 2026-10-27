@@ -3,6 +3,7 @@ package handler
 import (
 	"strings"
 
+	appconstants "site-dev-backend/internal/app/constants"
 	dto "site-dev-backend/internal/app/dto"
 
 	"gitlab.com/fami-app-v2/familib/familabs"
@@ -23,6 +24,24 @@ func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.
 		Search:  ctx.GetParamString("q"),
 	}
 	return
+}
+
+// siteIDParam reads a site/task ID from the URL path: the new site ID
+// "SD27/10/2026001" arrives as its twin "SD27-10-2026001" or "%2F"-encoded
+// (Echo keeps path parameters escaped) and is turned back into the stored
+// ID (constants.SiteIDFromPath). Old IDs and task IDs pass unchanged.
+func siteIDParam(ctx *familabs.Context, name string) string {
+	return appconstants.SiteIDFromPath(ctx.GetUriParamString(name))
+}
+
+// siteIDQuery is siteIDParam for a query parameter (already decoded by Go;
+// the twin is accepted too).
+func siteIDQuery(ctx *familabs.Context, name string) string {
+	v := ctx.QueryParam(name)
+	if v == "" {
+		return ""
+	}
+	return appconstants.SiteIDFromPath(v)
 }
 
 // userIDFromContext reads the user ID that middlewarex.Authorization (used

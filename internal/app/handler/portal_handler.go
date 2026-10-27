@@ -79,7 +79,7 @@ func (h PortalHandler) StatusCount(c echo.Context) (err error) {
 func (h PortalHandler) Report(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesPortal.GetReport(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx))
+	ctx.ResponseData, err = h.ServicesPortal.GetReport(ctx.Request().Context(), siteIDParam(ctx, "id"), userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -104,7 +104,7 @@ func (h PortalHandler) UpdateAds(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
-	ctx.ResponseData, err = h.ServicesPortal.UpdateAds(ctx.Request().Context(), ctx.GetUriParamString("id"), req, userIDFromContext(ctx))
+	ctx.ResponseData, err = h.ServicesPortal.UpdateAds(ctx.Request().Context(), siteIDParam(ctx, "id"), req, userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

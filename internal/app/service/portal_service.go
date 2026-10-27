@@ -307,7 +307,7 @@ func (s *PortalService) report(ctx context.Context, siteID string, userID int64)
 	if err = s.requireReader(ctx, userID); err != nil {
 		return
 	}
-	if !strings.HasPrefix(siteID, constants.SiteIDPrefix) {
+	if !constants.IsSiteID(siteID) {
 		err = echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("id %q bukan site_id", siteID))
 		return
 	}

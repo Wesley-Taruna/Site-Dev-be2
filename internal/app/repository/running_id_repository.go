@@ -16,10 +16,13 @@ const (
 	counterKeyTTL      = 48 * time.Hour
 )
 
-// IRunningIDRepository hands out the site and task IDs: prefix + date
-// (Asia/Jakarta) + 6-digit running number of that day, from a Redis counter
-// (same keys as site-dev-api, so both services never give out the same ID
-// as long as app.name/app.env match).
+// IRunningIDRepository hands out the site and task IDs from a daily Redis
+// counter per kind (same keys as site-dev-api, so both services never give
+// out the same number as long as app.name/app.env match):
+//   - task: "TS" + yyyymmdd (Asia/Jakarta) + 6-digit number (unchanged);
+//   - site (Wes, 27 Oct): "SD" + dd/mm/yyyy + number of at least 3 digits
+//     (constants.FormatSiteID), e.g. "SD27/10/2026001"; the counter starts
+//     at 1 every day (WIB).
 type IRunningIDRepository interface {
 	NextSiteID(ctx context.Context) (id string, err error)
 	NextTaskID(ctx context.Context) (id string, err error)
@@ -36,14 +39,28 @@ func NewRunningIDRepository() IRunningIDRepository {
 }
 
 func (r *RunningIDRepository) NextSiteID(ctx context.Context) (id string, err error) {
-	return r.next(ctx, "site", constants.SiteIDPrefix)
+	now := time.Now().In(jakartaLoc)
+	n, err := r.incr(ctx, "site", now)
+	if err != nil {
+		return
+	}
+	id = constants.FormatSiteID(now, n)
+	return
 }
 
 func (r *RunningIDRepository) NextTaskID(ctx context.Context) (id string, err error) {
-	return r.next(ctx, "task", constants.TaskIDPrefix)
+	now := time.Now().In(jakartaLoc)
+	n, err := r.incr(ctx, "task", now)
+	if err != nil {
+		return
+	}
+	id = fmt.Sprintf("%s%s%0*d", constants.TaskIDPrefix, now.Format("20060102"), runningNumberWidth, n)
+	return
 }
 
-func (r *RunningIDRepository) next(ctx context.Context, counterName string, prefix string) (id string, err error) {
+// incr is the next running number of counterName on day (key per
+// yyyymmdd, kept 48 h).
+func (r *RunningIDRepository) incr(ctx context.Context, counterName string, day time.Time) (n int64, err error) {
 	ctx, span := r.opt.Trace.Start(ctx, "RunningIDRepository.Next")
 	defer span.End()
 
@@ -53,10 +70,10 @@ func (r *RunningIDRepository) next(ctx context.Context, counterName string, pref
 		return
 	}
 
-	dateStr := time.Now().In(jakartaLoc).Format("20060102")
+	dateStr := day.Format("20060102")
 	key := redisKey(r.opt, fmt.Sprintf("counter:%s:%s", counterName, dateStr))
 
-	n, err := client.Incr(ctx, key).Result()
+	n, err = client.Incr(ctx, key).Result()
 	if err != nil {
 		err = fmt.Errorf("idgen: incr %s: %w", key, err)
 		span.RecordError(err)
@@ -70,6 +87,5 @@ func (r *RunningIDRepository) next(ctx context.Context, counterName string, pref
 		}
 	}
 
-	id = fmt.Sprintf("%s%s%0*d", prefix, dateStr, runningNumberWidth, n)
 	return
 }

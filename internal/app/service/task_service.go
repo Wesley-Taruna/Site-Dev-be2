@@ -289,7 +289,7 @@ func (s *TaskService) detail(ctx context.Context, id string) (res dto.TaskDetail
 	switch {
 	case strings.HasPrefix(id, constants.TaskIDPrefix):
 		task, err = s.RepositoryTask.GetByID(ctx, id)
-	case strings.HasPrefix(id, constants.SiteIDPrefix):
+	case constants.IsSiteID(id):
 		task, err = s.RepositoryTask.GetBySiteID(ctx, id)
 	default:
 		err = fmt.Errorf("id %q tidak dikenali (harus task_id atau site_id)", id)

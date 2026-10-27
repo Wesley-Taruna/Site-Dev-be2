@@ -89,6 +89,8 @@ func (h TaskHandler) Save(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
+	// the body carries the stored ID; a twin ("SD27-10-2026001") is accepted
+	req.Site.SiteID = constants.SiteIDFromPath(req.Site.SiteID)
 	ctx.ResponseData, err = h.ServicesSite.UpsertWithStatus(ctx.Request().Context(), req, status, userIDFromContext(ctx))
 	var missingErr *service.SubmitMissingError
 	if errors.As(err, &missingErr) {
@@ -115,7 +117,7 @@ func (h TaskHandler) Save(c echo.Context) (err error) {
 func (h TaskHandler) Nearby(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	req := dto.NearbyRequestGet{ExcludeSiteID: ctx.QueryParam("exclude_site_id")}
+	req := dto.NearbyRequestGet{ExcludeSiteID: siteIDQuery(ctx, "exclude_site_id")}
 	var parseErr error
 	if req.Lat, parseErr = strconv.ParseFloat(ctx.QueryParam("lat"), 64); parseErr != nil {
 		return ctx.Serve(familabs.ErrorInvalid("lat"))
@@ -149,7 +151,7 @@ func (h TaskHandler) Approve(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
-	if err = h.ServicesTask.Approve(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx), req); err != nil {
+	if err = h.ServicesTask.Approve(ctx.Request().Context(), siteIDParam(ctx, "id"), userIDFromContext(ctx), req); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
 	}
@@ -171,7 +173,7 @@ func (h TaskHandler) Cancel(c echo.Context) (err error) {
 		}
 	}
 
-	if err = h.ServicesTask.Cancel(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx), req); err != nil {
+	if err = h.ServicesTask.Cancel(ctx.Request().Context(), siteIDParam(ctx, "id"), userIDFromContext(ctx), req); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
 	}
@@ -190,7 +192,7 @@ func (h TaskHandler) GenerateAIInsight(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
-	ctx.ResponseData, err = h.ServicesAIInsight.Generate(ctx.Request().Context(), req.SiteID, userIDFromContext(ctx))
+	ctx.ResponseData, err = h.ServicesAIInsight.Generate(ctx.Request().Context(), constants.SiteIDFromPath(req.SiteID), userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -225,7 +227,7 @@ func (h TaskHandler) PreviewAIInsight(c echo.Context) (err error) {
 func (h TaskHandler) AIInsightQuota(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	req := dto.AIInsightQuotaRequestGet{SiteID: ctx.QueryParam("site_id")}
+	req := dto.AIInsightQuotaRequestGet{SiteID: siteIDQuery(ctx, "site_id")}
 	var parseErr error
 	if v := ctx.QueryParam("lat"); v != "" {
 		if req.Lat, parseErr = strconv.ParseFloat(v, 64); parseErr != nil {
@@ -251,7 +253,7 @@ func (h TaskHandler) AIInsightQuota(c echo.Context) (err error) {
 func (h TaskHandler) AIInsight(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesAIInsight.Get(ctx.Request().Context(), ctx.GetUriParamString("site_id"))
+	ctx.ResponseData, err = h.ServicesAIInsight.Get(ctx.Request().Context(), siteIDParam(ctx, "site_id"))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -271,7 +273,7 @@ func (h TaskHandler) UpdateContext(c echo.Context) (err error) {
 		return ctx.Serve(err)
 	}
 
-	ctx.ResponseData, err = h.ServicesSiteContext.Update(ctx.Request().Context(), ctx.GetUriParamString("site_id"), req, userIDFromContext(ctx))
+	ctx.ResponseData, err = h.ServicesSiteContext.Update(ctx.Request().Context(), siteIDParam(ctx, "site_id"), req, userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -295,7 +297,7 @@ func (h TaskHandler) Index(c echo.Context) (err error) {
 
 	req := dto.TaskRequestGet{
 		Page:   page.Page,
-		SiteID: ctx.GetParamString("site_id"),
+		SiteID: siteIDQuery(ctx, "site_id"),
 		Status: ctx.GetParamString("status"),
 		// November scope (open, review §5 #7): status_not=DRAFT
 		StatusNot: splitList(ctx.GetParamString("status_not")),
@@ -322,7 +324,7 @@ func (h TaskHandler) Index(c echo.Context) (err error) {
 func (h TaskHandler) History(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	siteID := ctx.GetUriParamString("id")
+	siteID := siteIDParam(ctx, "id")
 
 	var histories []dto.TaskHistoryResponseGet
 	histories, err = h.ServicesTask.GetHistory(ctx.Request().Context(), siteID)
@@ -341,7 +343,7 @@ func (h TaskHandler) History(c echo.Context) (err error) {
 func (h TaskHandler) Detail(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesTask.GetDetail(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx))
+	ctx.ResponseData, err = h.ServicesTask.GetDetail(ctx.Request().Context(), siteIDParam(ctx, "id"), userIDFromContext(ctx))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -355,7 +357,7 @@ func (h TaskHandler) Detail(c echo.Context) (err error) {
 func (h TaskHandler) Attachment(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesTask.GetAttachments(ctx.Request().Context(), ctx.GetUriParamString("id"))
+	ctx.ResponseData, err = h.ServicesTask.GetAttachments(ctx.Request().Context(), siteIDParam(ctx, "id"))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

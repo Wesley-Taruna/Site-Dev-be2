@@ -46,7 +46,7 @@ func (h *SiteHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 func (h SiteHandler) DeleteDraft(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	if err = h.ServicesSite.DeleteDraft(ctx.Request().Context(), ctx.GetUriParamString("id"), userIDFromContext(ctx)); err != nil {
+	if err = h.ServicesSite.DeleteDraft(ctx.Request().Context(), siteIDParam(ctx, "id"), userIDFromContext(ctx)); err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
 	}
@@ -126,7 +126,7 @@ func (h SiteHandler) ActiveList(c echo.Context) (err error) {
 func (h SiteHandler) Detail(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesSite.GetByID(ctx.Request().Context(), ctx.GetUriParamString("id"))
+	ctx.ResponseData, err = h.ServicesSite.GetByID(ctx.Request().Context(), siteIDParam(ctx, "id"))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -139,7 +139,7 @@ func (h SiteHandler) Detail(c echo.Context) (err error) {
 func (h SiteHandler) Context(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	ctx.ResponseData, err = h.ServicesSiteContext.GetBySiteID(ctx.Request().Context(), ctx.GetUriParamString("id"))
+	ctx.ResponseData, err = h.ServicesSiteContext.GetBySiteID(ctx.Request().Context(), siteIDParam(ctx, "id"))
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

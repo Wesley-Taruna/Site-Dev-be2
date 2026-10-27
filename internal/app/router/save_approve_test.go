@@ -85,7 +85,10 @@ func chainResult() sqlfake.Result {
 
 func TestSideBySide_SaveNewSiteAndSubmit(t *testing.T) {
 	m := withFlow(t)
-	siteID := "ST" + jakartaToday() + "000001"
+	// DIFFERENCE (Wes, 27 Oct): new site ID format SDdd/mm/yyyy + 3 digits
+	// (was "ST" + yyyymmdd + 6 digits); same Redis counter key
+	loc, _ := time.LoadLocation("Asia/Jakarta")
+	siteID := "SD" + time.Now().In(loc).Format("02/01/2006") + "001"
 	taskID := "TS" + jakartaToday() + "000001"
 	newSite := append([]driver.Value{siteID, "Toko Baru"}, siteST1Row()[2:]...)
 	newSite[22] = nil // never updated
