@@ -139,6 +139,9 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 	} else if req.Status == constants.TaskStatusWaitingGroup {
 		// status=WAITING = "Menunggu": both waiting levels (Wes, 28 Oct, simple app)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.WaitingStatuses, siteIDs, createdBy)
+	} else if req.Status == constants.TaskStatusCompleted {
+		// status=COMPLETED = "Disetujui": also old APPROVED rows (Wes, 28 Oct, simple app)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.CompletedStatuses, siteIDs, createdBy)
 	} else if req.Status == constants.TaskStatusRejectedGroup {
 		// status=REJECTED_ANY = "Ditolak": REVISION + REJECTED (Wes, 26 Oct)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.RejectedStatuses, siteIDs, createdBy)

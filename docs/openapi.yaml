@@ -47,7 +47,8 @@ info:
     `WAITING_DEPT_HEAD`, `WAITING_DIV_HEAD`, `HOLD_DEPT_HEAD`, `HOLD_DIV_HEAD`, `REVISION`
     ("Ditolak, bisa direvisi"), `REJECTED` ("Ditolak final"), `COMPLETED` (approved by the last level),
     `CANCELLED` ("Dibatalkan"). `SUBMITED` (sic) is only the *send* action in `POST /v1/task/SUBMITED`.
-    `APPROVED` is never stored on a request; it is a portal group name.
+    `APPROVED` is never written on a request by this backend (old site-dev-api data might have it, so
+    the list filter `status=COMPLETED` matches it too); it is also a portal group name.
 
     **Roles** (`Users.RoleID`): `USER` (site staff, "Staf"), `DEPT_HEAD`, `DIV_HEAD`, `ADMIN`.
     Each operation lists who may call it in its description and in `x-roles`.
@@ -124,6 +125,7 @@ paths:
           description: |
             One stored status (e.g. `WAITING_DEPT_HEAD`), or a group: `HOLD` = both `HOLD_*`;
             `WAITING` = `WAITING_DEPT_HEAD` + `WAITING_DIV_HEAD` (+ `SUBMITED`, if ever stored) ("Menunggu", simple app);
+            `COMPLETED` = `COMPLETED` + `APPROVED` ("Disetujui"; `APPROVED` only in old site-dev-api data);
             `REJECTED_ANY` = `REVISION` + `REJECTED` ("Ditolak").
           schema: {type: string, example: WAITING_DEPT_HEAD}
         - name: status_not

@@ -75,3 +75,14 @@ func TestApprovalLists_Limit(t *testing.T) {
 		assert.Contains(t, rec.sqls[1], "FETCH NEXT 100 ROWS ONLY", path)
 	}
 }
+
+// status=COMPLETED = "Disetujui" also matches old APPROVED rows (§2.5).
+func TestTaskList_StatusCompletedIncludesApproved(t *testing.T) {
+	h, rec := setup(t, "USER")
+
+	code, body := get(t, h, "/v1/task?status=COMPLETED")
+
+	require.Equal(t, http.StatusOK, code, string(body))
+	assert.Equal(t, `SELECT count(*) FROM "Tasks" WHERE TaskStatus IN ('COMPLETED','APPROVED') AND CreatedBy = 1001`, rec.sqls[1])
+	assert.Equal(t, `SELECT * FROM "Tasks" WHERE TaskStatus IN ('COMPLETED','APPROVED') AND CreatedBy = 1001 ORDER BY CreatedAt ASC OFFSET 0 ROW FETCH NEXT 20 ROWS ONLY`, rec.sqls[2])
+}

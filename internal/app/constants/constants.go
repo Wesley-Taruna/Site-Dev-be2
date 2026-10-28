@@ -59,6 +59,11 @@ const TaskStatusWaitingGroup = "WAITING"
 // for safety: a sent request normally moves to WAITING_DEPT_HEAD at once.
 var WaitingStatuses = []string{TaskStatusSubmited, TaskStatusWaiting(RoleDeptHead), TaskStatusWaiting(RoleDivHead)}
 
+// CompletedStatuses are what status=COMPLETED ("Disetujui") answers (Wes,
+// 28 Oct, simple app): COMPLETED plus APPROVED, which this backend never
+// writes on a task but old site-dev-api data might have.
+var CompletedStatuses = []string{TaskStatusCompleted, TaskStatusApproved}
+
 // Task history actions stored in TaskHistories.Action.
 const (
 	TaskActionCreate   = "CREATE"
