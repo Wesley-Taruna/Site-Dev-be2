@@ -5,6 +5,14 @@ info:
   description: |
     REST API of **Site Development** (site survey, Gemini AI location score, approval
     chain Dept Head -> Div Head) for the Familink mobile app and the FamilyMart web portal.
+
+    **Mobile app = the simple version (Wes, 28 Okt).** The Familink FE team builds the screens of
+    https://site-dev-simple.vercel.app. It needs **23 of the 68 operations** here (+2 maybe: the token
+    check `POST /v1/validation`, depending on how Familink logs users in, and `GET /v1/competitor-brands`).
+    Every operation carries `x-mobile-app` (which screen uses it, or who else does); the summary of the
+    ones the app does not use ends with "(not used by the mobile app)". Nothing was removed: the web
+    portal, admin screens, background jobs and old web app still use the rest.
+    Staff Home tiles: use `GET /v1/task/status/count` (own requests), not the dashboard count (everyone's).
     Written from the code (handlers, DTOs, validation) of `site-dev-backend`; a Go test
     (`internal/app/router/openapi_routes_test.go`) fails when a route is added or removed
     without updating this file.
@@ -116,6 +124,7 @@ paths:
         `sort_by=CreatedAt&sort_dir=desc` for newest first.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskList
+      x-mobile-app: "used: Pengajuan saya; Persetujuan > Pengajuan (chips Semua, Menunggu, Hold Status, Revisi, Ditolak Final, Disetujui, ...)"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -175,10 +184,11 @@ paths:
   /v1/task/site-list:
     get:
       tags: [Task / Pengajuan]
-      summary: Site Request table (every request except APPROVED)
+      summary: Site Request table (every request except APPROVED) (not used by the mobile app)
       description: Roles - all; every role sees every request (old web app's "Site Request" table). 20 rows per page.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskSiteList
+      x-mobile-app: "not used (other systems): old web app's Site Request table"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -206,6 +216,7 @@ paths:
       description: Roles - all. `USER` counts only their own requests. Statuses with 0 are not listed.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskStatusCount
+      x-mobile-app: "used: chip numbers + Home tiles (staff: own requests only)"
       responses:
         '200':
           description: Counts
@@ -234,6 +245,7 @@ paths:
         Only name, status, owner and distance; no phone numbers or survey of other staff.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskNearby
+      x-mobile-app: "used: \"Pengajuan lain di sekitar\" notice in the form and on the map"
       parameters:
         - $ref: '#/components/parameters/LatRequired'
         - $ref: '#/components/parameters/LngRequired'
@@ -275,6 +287,7 @@ paths:
         `context` is null when the survey was never filled.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskDetail
+      x-mobile-app: "used: request detail (Info, Survei & AI, Riwayat), sent page, edit/revisi form"
       parameters:
         - $ref: '#/components/parameters/TaskOrSiteId'
       responses:
@@ -298,10 +311,11 @@ paths:
   /v1/task/{id}/history:
     get:
       tags: [Task / Pengajuan]
-      summary: History rows of a request (Riwayat), oldest first
+      summary: History rows of a request (Riwayat), oldest first (not used by the mobile app)
       description: Roles - all. `id` = site_id.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskHistory
+      x-mobile-app: "not used: not needed: the detail already holds the history"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       responses:
@@ -320,10 +334,11 @@ paths:
   /v1/task/{id}/attachment:
     get:
       tags: [Task / Pengajuan]
-      summary: Photos / attachments of a request
+      summary: Photos / attachments of a request (not used by the mobile app)
       description: Roles - all. `id` = site_id.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskAttachments
+      x-mobile-app: "not used: not needed: the detail already holds the photos"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       responses:
@@ -341,12 +356,13 @@ paths:
   /v1/task/context/{site_id}:
     put:
       tags: [Task / Pengajuan]
-      summary: Replace the on-site survey (Konteks On-Site / Survei lapangan)
+      summary: Replace the on-site survey (Konteks On-Site / Survei lapangan) (not used by the mobile app)
       description: |
         Roles - the creator of the site only, while the request is `DRAFT` or `REVISION`.
         Replaces all fields and both lists (competitors, custom notes).
       x-roles: [USER]
       operationId: taskContextUpdate
+      x-mobile-app: "not used: not needed: the survey is saved with Simpan draft / Kirim"
       parameters:
         - $ref: '#/components/parameters/SiteIdPath'
       requestBody:
@@ -403,6 +419,7 @@ paths:
         `submit_count` + 1, approval restarts at level 1).
       x-roles: [USER]
       operationId: taskSave
+      x-mobile-app: "used: Simpan draft / Kirim (form and quick send)"
       parameters:
         - name: status
           in: path
@@ -489,13 +506,14 @@ paths:
   /v1/task/{id}/cancel:
     post:
       tags: [Task / Pengajuan]
-      summary: (baru, 26 Okt) Cancel a returned request (Batalkan pengajuan)
+      summary: (baru, 26 Okt) Cancel a returned request (Batalkan pengajuan) (not used by the mobile app)
       description: |
         Roles - the creator only. Only a request in `REVISION` ("Ditolak, bisa direvisi") can be cancelled;
         it becomes `CANCELLED` ("Dibatalkan"), stays with its history (action `CANCEL`), and drops out of the
         active lists and the duplicate check. `id` = task_id or site_id. Body optional.
       x-roles: [USER]
       operationId: taskCancel
+      x-mobile-app: "not used: simple has no \"Batalkan pengajuan\" button (open question: CANCELLED)"
       parameters:
         - $ref: '#/components/parameters/TaskOrSiteId'
       requestBody:
@@ -534,10 +552,11 @@ paths:
   /v1/site/{id}:
     get:
       tags: [Map / Places]
-      summary: One site
+      summary: One site (not used by the mobile app)
       description: Roles - all. `id` = site_id.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteDetail
+      x-mobile-app: "not used (other systems): old web app; the detail already holds the site"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       responses:
@@ -555,13 +574,14 @@ paths:
         '500': {$ref: '#/components/responses/RecordNotFound'}
     delete:
       tags: [Task / Pengajuan]
-      summary: (baru, 26 Okt) Delete a draft that was never sent (Hapus draft)
+      summary: (baru, 26 Okt) Delete a draft that was never sent (Hapus draft) (not used by the mobile app)
       description: |
         Roles - the creator only. Only a `DRAFT` that was never sent (no approval round, no SUBMIT/RESUBMIT
         in its history). Removes the site, survey, photos, AI result, history and request for good.
         The AI limits keep what the draft used. `id` = site_id or task_id.
       x-roles: [USER]
       operationId: siteDeleteDraft
+      x-mobile-app: "not used: simple has no \"Hapus draft\" button"
       parameters:
         - $ref: '#/components/parameters/TaskOrSiteId'
       responses:
@@ -594,6 +614,7 @@ paths:
       description: Roles - DEPT_HEAD, DIV_HEAD (any user who is the approver of a level; others get an empty list). `limit` (or `per_page`) rows per page, default 20, max 100 (baru, 28 Okt).
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approvalPending
+      x-mobile-app: "used: Home \"Task : Need Approval\" number; Persetujuan list (heads)"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -622,6 +643,7 @@ paths:
       description: Roles - DEPT_HEAD, DIV_HEAD. `limit` (or `per_page`) rows per page, default 20, max 100 (baru, 28 Okt); newest decision first by default.
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approvalHistory
+      x-mobile-app: "used: Persetujuan > decisions already made (heads)"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -660,6 +682,7 @@ paths:
         A held level takes only `RELEASE`. The answer has no `data`.
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approvalDecide
+      x-mobile-app: "used: Setujui / Tolak (Revisi or Ditolak Final) / Hold Status / Lanjutkan"
       parameters:
         - name: id
           in: path
@@ -703,12 +726,13 @@ paths:
   /v1/validation/approval:
     post:
       tags: [Approval]
-      summary: Exchange an e-mail approval code for a token (no login needed)
+      summary: Exchange an e-mail approval code for a token (no login needed) (not used by the mobile app)
       description: |
         Roles - anyone with the link. The approval e-mail links to the app with `?approval_code=<32 chars>`;
         this answers a token for the approver plus the site to open. The code must still be pending.
       x-roles: [public]
       operationId: approvalCodeLogin
+      x-mobile-app: "not used (other systems): link in the approval e-mail (only if e-mails link into an app page; simple has none)"
       security: []
       requestBody:
         required: true
@@ -751,7 +775,7 @@ paths:
   /v1/task/ai-insight:
     post:
       tags: [AI Insight]
-      summary: Make a new AI analysis for a saved site (newest is shown; earlier ones kept)
+      summary: Make a new AI analysis for a saved site (newest is shown; earlier ones kept) (not used by the mobile app)
       description: |
         Roles - all (the app shows it to staff). One Gemini call (~20-30 s). Counts against the limits:
         per staff per day, per site location (~110 m, all users, all rounds) and per day for everyone.
@@ -762,6 +786,7 @@ paths:
         earlier ones stay in the database as history; `GET /v1/task/ai-insight/{site_id}` returns the newest.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiGenerate
+      x-mobile-app: "not used (other systems): AI on save when switched on in config (background job); simple uses preview"
       requestBody:
         required: true
         content:
@@ -808,6 +833,7 @@ paths:
         inside `insight` on save so the next check knows the inputs.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiPreview
+      x-mobile-app: "used: \"Buat analisis AI\" in the form"
       requestBody:
         required: true
         content:
@@ -854,6 +880,7 @@ paths:
         per-site limit on, `site` is added; with the daily cap on, `server_today` is added.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiQuota
+      x-mobile-app: "used: \"Sisa analisis AI\" under the AI button"
       parameters:
         - {name: lat, in: query, schema: {type: number, format: double}}
         - {name: lng, in: query, schema: {type: number, format: double}}
@@ -886,6 +913,7 @@ paths:
       description: Roles - all. A site without an analysis answers 500 `record not found` (old behaviour; the app shows "Belum ada analisis AI").
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: aiGet
+      x-mobile-app: "used: detail \"Survei & AI\" tab; form after a revision"
       parameters:
         - $ref: '#/components/parameters/SiteIdPath'
       responses:
@@ -911,10 +939,11 @@ paths:
   /v1/site:
     get:
       tags: [Map / Places]
-      summary: List of sites
+      summary: List of sites (not used by the mobile app)
       description: Roles - all. 20 rows per page.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteList
+      x-mobile-app: "not used (other systems): old web app site list"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -943,6 +972,7 @@ paths:
       description: Roles - all. Stores come from `AMFIBI_MASTER.dbo.MStore`; requested sites carry `task_status`.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteMaps
+      x-mobile-app: "used: Home store counts per city; FamilyMart stores near the pin"
       responses:
         '200':
           description: Points + counts per store type
@@ -968,10 +998,11 @@ paths:
   /v1/site/active-list:
     get:
       tags: [Map / Places]
-      summary: Active FamilyMart stores table (Site Active)
+      summary: Active FamilyMart stores table (Site Active) (not used by the mobile app)
       description: Roles - all. 20 rows per page; `q` matches store code or name.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteActiveList
+      x-mobile-app: "not used (other systems): full prototype's Peta / store list page; old web app"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -998,6 +1029,7 @@ paths:
         A new area = 9 Google calls today. Server switch `[places] enabled` off = 503.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteNearbyPlaces
+      x-mobile-app: "used: map layers Kompetitor + Kantor around the pin and on the detail map"
       parameters:
         - $ref: '#/components/parameters/LatRequired'
         - $ref: '#/components/parameters/LngRequired'
@@ -1039,10 +1071,11 @@ paths:
   /v1/site/{id}/context:
     get:
       tags: [Map / Places]
-      summary: The on-site survey of a site
+      summary: The on-site survey of a site (not used by the mobile app)
       description: Roles - all. `id` = site_id. No survey yet = 500 `record not found` (old behaviour).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteContext
+      x-mobile-app: "not used (other systems): old web app; the detail already holds the survey"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       responses:
@@ -1068,6 +1101,7 @@ paths:
         with `GET /v1/wilayah/search?postal_code=`.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: geocodingReverse
+      x-mobile-app: "used: address of the pin (Pilih titik, location card when the street is empty)"
       parameters:
         - $ref: '#/components/parameters/LatRequired'
         - $ref: '#/components/parameters/LngRequired'
@@ -1095,10 +1129,11 @@ paths:
   /v1/geocoding/search:
     get:
       tags: [Map / Places]
-      summary: Address search by text (Peta search box)
+      summary: Address search by text (Peta search box) (not used by the mobile app)
       description: Roles - all. `q` at least 3 characters; empty `q` = empty list. Same quota as reverse.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: geocodingSearch
+      x-mobile-app: "not used (other systems): full prototype's Peta search box; simple has no typed address search"
       parameters:
         - name: q
           in: query
@@ -1146,6 +1181,7 @@ paths:
         No note/reason on any row (it is in the request's Riwayat). Page size `limit` (default 20, max 100).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD]
       operationId: activityList
+      x-mobile-app: "used: Activity Log (Semua / Perlu tindakan / Dari Approval or Keputusan saya)"
       parameters:
         - name: filter
           in: query
@@ -1174,6 +1210,7 @@ paths:
       description: Roles - USER, DEPT_HEAD, DIV_HEAD (ADMIN gets 0). Rows newer than the last `POST /v1/activity/seen`; never opened = last 3 days.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD]
       operationId: activityUnreadCount
+      x-mobile-app: "used: red badge on the Activity Log tab"
       responses:
         '200':
           description: Count
@@ -1196,6 +1233,7 @@ paths:
       description: Roles - all. No body; the answer has no data.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: activitySeen
+      x-mobile-app: "used: opening the Activity Log clears the badge"
       responses:
         '200': {$ref: '#/components/responses/OkNoData'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1212,6 +1250,7 @@ paths:
         sent one of my approved requests back to the staff (Dept Head only).
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approverNews
+      x-mobile-app: "used: \"Baru\" marks in Persetujuan (heads)"
       responses:
         '200':
           description: News
@@ -1239,6 +1278,7 @@ paths:
       description: Roles - all. No body; the answer has no data.
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approverNewsSeen
+      x-mobile-app: "used: opening Persetujuan clears \"Baru\""
       responses:
         '200': {$ref: '#/components/responses/OkNoData'}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -1248,12 +1288,13 @@ paths:
   /v1/portal/site:
     get:
       tags: [Portal]
-      summary: Portal site log (sent requests, no drafts)
+      summary: Portal site log (sent requests, no drafts) (not used by the mobile app)
       description: |
         Roles - DEPT_HEAD, DIV_HEAD, ADMIN (office users; USER = 403). How the web portal logs in is still open
         (same token check for now). Page size `limit` (default 20, max 100).
       x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: portalList
+      x-mobile-app: "not used (other systems): FamilyMart web portal (Site Dev menu)"
       parameters:
         - name: status
           in: query
@@ -1285,10 +1326,11 @@ paths:
   /v1/portal/site/status/count:
     get:
       tags: [Portal]
-      summary: Portal counts per group (the 5 summary cards)
+      summary: Portal counts per group (the 5 summary cards) (not used by the mobile app)
       description: Roles - DEPT_HEAD, DIV_HEAD, ADMIN. Every group is listed, also with 0.
       x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: portalStatusCount
+      x-mobile-app: "not used (other systems): web portal summary cards"
       responses:
         '200':
           description: Counts
@@ -1319,10 +1361,11 @@ paths:
   /v1/portal/site/{id}/report:
     get:
       tags: [Portal]
-      summary: Everything the PDF report needs, in one call
+      summary: Everything the PDF report needs, in one call (not used by the mobile app)
       description: Roles - DEPT_HEAD, DIV_HEAD, ADMIN. `id` = site_id (`SD...` path twin, or old `ST...`). `insight` null when never made.
       x-roles: [DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: portalReport
+      x-mobile-app: "not used (other systems): web portal PDF report"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       responses:
@@ -1347,10 +1390,11 @@ paths:
   /v1/portal/site/{id}/ads:
     put:
       tags: [Portal]
-      summary: Set the ADS value of a site (Rupiah per day)
+      summary: Set the ADS value of a site (Rupiah per day) (not used by the mobile app)
       description: Roles - ADMIN (default while the editor question is open). Only for sites shown in the portal.
       x-roles: [ADMIN]
       operationId: portalAdsUpdate
+      x-mobile-app: "not used (other systems): web portal ADS value (ADMIN)"
       parameters:
         - $ref: '#/components/parameters/SiteIdInPathAsId'
       requestBody:
@@ -1392,13 +1436,14 @@ paths:
   /v1/competitor-brands:
     get:
       tags: [Competitor brands]
-      summary: Competitor brand list
+      summary: Competitor brand list (maybe used by the mobile app)
       description: |
         Roles - all. Every row of `CompetitorBrands`, also inactive ones (`active: false`, e.g. Yomart).
         Active rows drive the nearby search. Today: Indomaret, Alfamart, Alfamidi, Lawson, Circle K, K3 Mart,
         Kopi Kenangan, Tomoro Coffee; Yomart inactive.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: competitorBrands
+      x-mobile-app: "maybe: brand names/colours; simple keeps the list inside the app today (could load it from here)"
       responses:
         '200':
           description: Brands
@@ -1422,6 +1467,7 @@ paths:
         Neither = empty list. 20 rows per page.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: wilayahSearch
+      x-mobile-app: "used: kecamatan / kota from the postal code in the form"
       parameters:
         - {name: q, in: query, schema: {type: string, minLength: 3, example: Bangka}}
         - {name: postal_code, in: query, schema: {type: string, example: '12730'}}
@@ -1448,10 +1494,11 @@ paths:
   /v1/wilayah/provinces:
     get:
       tags: [Master data]
-      summary: Province list
+      summary: Province list (not used by the mobile app)
       description: Roles - all.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: wilayahProvinces
+      x-mobile-app: "not used (other systems): old web app region pickers"
       responses:
         '200':
           description: Provinces
@@ -1473,10 +1520,11 @@ paths:
   /v1/wilayah/provinces/{code}:
     get:
       tags: [Master data]
-      summary: A province with every regency, district and village
+      summary: A province with every regency, district and village (not used by the mobile app)
       description: Roles - all. Large answer.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: wilayahProvinceTree
+      x-mobile-app: "not used (other systems): old web app region pickers"
       parameters:
         - {name: code, in: path, required: true, schema: {type: string, example: '31'}}
       responses:
@@ -1495,10 +1543,11 @@ paths:
   /v1/dashboard/task/history:
     get:
       tags: [Master data]
-      summary: Dashboard - history rows of every request
+      summary: Dashboard - history rows of every request (not used by the mobile app)
       description: Roles - all (old web dashboard). 20 rows per page.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: dashboardHistory
+      x-mobile-app: "not used (other systems): old web dashboard"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -1521,10 +1570,11 @@ paths:
   /v1/dashboard/task/status/count:
     get:
       tags: [Master data]
-      summary: Dashboard - every request per status
+      summary: Dashboard - every request per status (not used by the mobile app)
       description: Roles - all (not limited to own requests).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: dashboardStatusCount
+      x-mobile-app: "not used (other systems): old web dashboard (counts every request; simple's Home should use /v1/task/status/count, see note)"
       responses:
         '200':
           description: Counts
@@ -1549,6 +1599,7 @@ paths:
         the main build (plan Q4): until it is set up this answers 500 "not set up yet".
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: uploadAdd
+      x-mobile-app: "used: add a photo in the form"
       requestBody:
         required: true
         content:
@@ -1588,6 +1639,7 @@ paths:
       description: Roles - all. The answer has no data.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: uploadRemove
+      x-mobile-app: "used: remove a photo in the form"
       requestBody:
         required: true
         content:
@@ -1615,6 +1667,7 @@ paths:
       description: Roles - all. `id` = attachment id (number). Content type from the file name. Unknown = 422 (old behaviour).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: attachmentFile
+      x-mobile-app: "used: show a photo on the detail"
       parameters:
         - {name: id, in: path, required: true, schema: {type: integer, example: 12}}
       responses:
@@ -1638,10 +1691,11 @@ paths:
   /v1/roles:
     get:
       tags: [Admin]
-      summary: Roles with their approval level
+      summary: Roles with their approval level (not used by the mobile app)
       description: Roles - ADMIN only.
       x-roles: [ADMIN]
       operationId: roles
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       responses:
         '200':
           description: Roles
@@ -1664,10 +1718,11 @@ paths:
   /v1/users:
     get:
       tags: [Admin]
-      summary: Users with today's AI and geocoding quota
+      summary: Users with today's AI and geocoding quota (not used by the mobile app)
       description: Roles - ADMIN only. Not paged.
       x-roles: [ADMIN]
       operationId: usersList
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       responses:
         '200':
           description: Users
@@ -1682,10 +1737,11 @@ paths:
         '403': {$ref: '#/components/responses/NotAdmin'}
     post:
       tags: [Admin]
-      summary: Add a user (NIK + role)
+      summary: Add a user (NIK + role) (not used by the mobile app)
       description: Roles - ADMIN only. `user_id` = NIK. Login itself stays with the token issuer.
       x-roles: [ADMIN]
       operationId: usersCreate
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       requestBody:
         required: true
         content:
@@ -1724,10 +1780,11 @@ paths:
   /v1/users/{id}:
     put:
       tags: [Admin]
-      summary: Change a user's name, e-mail or role
+      summary: Change a user's name, e-mail or role (not used by the mobile app)
       description: Roles - ADMIN only. Empty fields are left unchanged.
       x-roles: [ADMIN]
       operationId: usersUpdate
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       parameters:
         - $ref: '#/components/parameters/UserIdPath'
       requestBody:
@@ -1756,10 +1813,11 @@ paths:
         '500': {$ref: '#/components/responses/RecordNotFound'}
     delete:
       tags: [Admin]
-      summary: Remove a user
+      summary: Remove a user (not used by the mobile app)
       description: Roles - ADMIN only. The answer has no data.
       x-roles: [ADMIN]
       operationId: usersDelete
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       parameters:
         - $ref: '#/components/parameters/UserIdPath'
       responses:
@@ -1771,12 +1829,13 @@ paths:
   /v1/approval-matrix:
     get:
       tags: [Admin]
-      summary: Approval matrix (which user approves for which role)
+      summary: Approval matrix (which user approves for which role) (not used by the mobile app)
       description: |
         Roles - any logged-in user (no admin check in the code, as in site-dev-api; the old web app shows it only
         to ADMIN). Not paged.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: approvalMatrixList
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       responses:
         '200':
           description: Rows
@@ -1791,10 +1850,11 @@ paths:
         '403': {$ref: '#/components/responses/NoToken'}
     post:
       tags: [Admin]
-      summary: Add an approver for a role
+      summary: Add an approver for a role (not used by the mobile app)
       description: Roles - any logged-in user (no admin check in the code, as in site-dev-api).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: approvalMatrixCreate
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       requestBody:
         required: true
         content:
@@ -1831,10 +1891,11 @@ paths:
   /v1/approval-matrix/{id}:
     put:
       tags: [Admin]
-      summary: Change the approver or switch a row on/off
+      summary: Change the approver or switch a row on/off (not used by the mobile app)
       description: Roles - any logged-in user (no admin check in the code, as in site-dev-api). `user_id` 0 / missing `is_active` = unchanged. No data in the answer.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: approvalMatrixUpdate
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       parameters:
         - {name: id, in: path, required: true, schema: {type: integer, example: 1}}
       requestBody:
@@ -1855,10 +1916,11 @@ paths:
   /v1/settings/limits:
     get:
       tags: [Admin]
-      summary: Daily AI and geocoding limit per user
+      summary: Daily AI and geocoding limit per user (not used by the mobile app)
       description: Roles - ADMIN only. Value from `SystemSettings`, else config, else 50 / 100.
       x-roles: [ADMIN]
       operationId: settingsLimits
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       responses:
         '200':
           description: Limits
@@ -1873,10 +1935,11 @@ paths:
         '403': {$ref: '#/components/responses/NotAdmin'}
     put:
       tags: [Admin]
-      summary: Change the daily limits (missing = unchanged, given = at least 1)
+      summary: Change the daily limits (missing = unchanged, given = at least 1) (not used by the mobile app)
       description: Roles - ADMIN only.
       x-roles: [ADMIN]
       operationId: settingsLimitsUpdate
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       requestBody:
         required: true
         content:
@@ -1907,10 +1970,11 @@ paths:
   /v1/settings/quota-flush:
     post:
       tags: [Admin]
-      summary: Reset one user's counter for today (Reset Limit Pengguna)
+      summary: Reset one user's counter for today (Reset Limit Pengguna) (not used by the mobile app)
       description: Roles - ADMIN only.
       x-roles: [ADMIN]
       operationId: settingsQuotaFlush
+      x-mobile-app: "not used (other systems): admin screens (ADMIN)"
       requestBody:
         required: true
         content:
@@ -1949,10 +2013,11 @@ paths:
   /v1/validation:
     post:
       tags: [Login / token]
-      summary: Is my token still good, and whose is it
+      summary: Is my token still good, and whose is it (maybe used by the mobile app)
       description: Roles - all. No body. `nik` = `user_id` as text.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: validateToken
+      x-mobile-app: "maybe: token check at app start; depends on how Familink logs users in (open, plan Q1b)"
       responses:
         '200':
           description: Token owner
@@ -1971,10 +2036,11 @@ paths:
   /v1/queue/approval-email:
     post:
       tags: [Background jobs]
-      summary: Send a queued approval e-mail
+      summary: Send a queued approval e-mail (not used by the mobile app)
       description: Called by the background-job service (Basic auth `[public_api]`), not by apps. The e-mail sender is still a TODO in the main build (plan Q4).
       x-roles: [job-service]
       operationId: queueApprovalEmail
+      x-mobile-app: "not used (other systems): background job: approval e-mails"
       security:
         - jobBasicAuth: []
       requestBody:
@@ -1999,10 +2065,11 @@ paths:
   /v1/queue/ai-insight:
     post:
       tags: [Background jobs]
-      summary: Make a queued AI analysis
+      summary: Make a queued AI analysis (not used by the mobile app)
       description: Called by the background-job service (Basic auth). Same limits and answers as `POST /v1/task/ai-insight`, except an empty survey or unchanged inputs (nothing new to analyse) answer 200 so the queue does not retry.
       x-roles: [job-service]
       operationId: queueAIInsight
+      x-mobile-app: "not used (other systems): background job: AI on save"
       security:
         - jobBasicAuth: []
       requestBody:
@@ -2022,10 +2089,11 @@ paths:
   /v1/queue/ai-insight-quota-flush:
     post:
       tags: [Background jobs]
-      summary: Reset every user's AI counter (daily at 00:00 WIB)
+      summary: Reset every user's AI counter (daily at 00:00 WIB) (not used by the mobile app)
       description: Called by a scheduler (Basic auth).
       x-roles: [job-service]
       operationId: queueAIQuotaFlush
+      x-mobile-app: "not used (other systems): scheduler: daily AI counter reset"
       security:
         - jobBasicAuth: []
       responses:
@@ -2047,10 +2115,11 @@ paths:
   /v1/health-check:
     get:
       tags: [Health]
-      summary: Health check (no login)
+      summary: Health check (no login) (not used by the mobile app)
       description: Answers 200 with the service name (`[app] name`) as `message` (devops may set it to `site-dev-api`, plan Q13). Does not check the database or Redis.
       x-roles: [public]
       operationId: healthCheck
+      x-mobile-app: "not used (other systems): server monitoring (devops)"
       security: []
       responses:
         '200':
@@ -2062,10 +2131,11 @@ paths:
   /v1/docs:
     get:
       tags: [Health]
-      summary: This page (interactive API docs)
+      summary: This page (interactive API docs) (not used by the mobile app)
       description: Only when `[docs] enabled = true` (dev / local). Off by default, so production answers 404.
       x-roles: [public]
       operationId: docsPage
+      x-mobile-app: "not used (other systems): API docs page for developers (dev/local only)"
       security: []
       responses:
         '200':
@@ -2076,10 +2146,11 @@ paths:
   /v1/docs/openapi.yaml:
     get:
       tags: [Health]
-      summary: This API description (OpenAPI 3 YAML)
+      summary: This API description (OpenAPI 3 YAML) (not used by the mobile app)
       description: Only when `[docs] enabled = true`.
       x-roles: [public]
       operationId: docsSpec
+      x-mobile-app: "not used (other systems): API docs file for developers (dev/local only)"
       security: []
       responses:
         '200':
@@ -2092,20 +2163,22 @@ paths:
   /v1/person:
     get:
       tags: [Boilerplate sample]
-      summary: Template sample - list persons
+      summary: Template sample - list persons (not used by the mobile app)
       description: Sample of the FamilyMart Go template; not used, no login, no `person` table in the Site Dev database.
       x-roles: [public]
       operationId: samplePersonList
+      x-mobile-app: "not used: template sample, no table behind it"
       security: []
       responses:
         '200': {$ref: '#/components/responses/OkNoData'}
         '500': {$ref: '#/components/responses/ServerError'}
     post:
       tags: [Boilerplate sample]
-      summary: Template sample - create a person
+      summary: Template sample - create a person (not used by the mobile app)
       description: Template sample; not used.
       x-roles: [public]
       operationId: samplePersonCreate
+      x-mobile-app: "not used: template sample"
       security: []
       responses:
         '200': {$ref: '#/components/responses/OkNoData'}
@@ -2113,10 +2186,11 @@ paths:
   /v1/person/{id}:
     get:
       tags: [Boilerplate sample]
-      summary: Template sample - one person
+      summary: Template sample - one person (not used by the mobile app)
       description: Template sample; not used.
       x-roles: [public]
       operationId: samplePersonDetail
+      x-mobile-app: "not used: template sample"
       security: []
       parameters:
         - {name: id, in: path, required: true, schema: {type: integer}}
@@ -2125,10 +2199,11 @@ paths:
         '500': {$ref: '#/components/responses/ServerError'}
     put:
       tags: [Boilerplate sample]
-      summary: Template sample - update a person
+      summary: Template sample - update a person (not used by the mobile app)
       description: Template sample; not used.
       x-roles: [public]
       operationId: samplePersonUpdate
+      x-mobile-app: "not used: template sample"
       security: []
       parameters:
         - {name: id, in: path, required: true, schema: {type: integer}}
@@ -2137,10 +2212,11 @@ paths:
         '500': {$ref: '#/components/responses/ServerError'}
     delete:
       tags: [Boilerplate sample]
-      summary: Template sample - delete a person
+      summary: Template sample - delete a person (not used by the mobile app)
       description: Template sample; not used.
       x-roles: [public]
       operationId: samplePersonDelete
+      x-mobile-app: "not used: template sample"
       security: []
       parameters:
         - {name: id, in: path, required: true, schema: {type: integer}}
