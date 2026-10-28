@@ -10,7 +10,8 @@ import (
 	"gitlab.com/fami-app-v2/familib/familabs/constants"
 )
 
-// listRequest reads page, sort_by, sort_dir and q of a paged list.
+// listRequest reads page, sort_by, sort_dir and q of a paged list (page
+// size fixed at dto.ListPageSize).
 func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.Paginator, err error) {
 	page, err = familabs.NewPaginator(ctx)
 	if err != nil {
@@ -22,6 +23,22 @@ func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.
 		SortBy:  ctx.GetParamString("sort_by"),
 		SortDir: ctx.GetParamString("sort_dir"),
 		Search:  ctx.GetParamString("q"),
+	}
+	return
+}
+
+// limitedListRequest is listRequest with the page size from limit /
+// per_page (optionalLimitPage).
+func limitedListRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.Paginator, err error) {
+	if page, err = optionalLimitPage(ctx); err != nil {
+		return
+	}
+	req = dto.ListRequestGet{
+		Page:    page.Page,
+		SortBy:  ctx.GetParamString("sort_by"),
+		SortDir: ctx.GetParamString("sort_dir"),
+		Search:  ctx.GetParamString("q"),
+		Limit:   page.Limit,
 	}
 	return
 }
@@ -63,9 +80,10 @@ func splitList(v string) []string {
 	return out
 }
 
-// Page size of the November lists (Activity Log, portal): limit (or
-// per_page), default 20, at most 100. The older site-dev lists keep their
-// fixed 20 (dto.ListPageSize).
+// Page size of the November lists (Activity Log, portal) and, since Wes,
+// 28 Oct (simple app), of GET /v1/task, /pending-approvals and
+// /approval-history: limit (or per_page), default 20, at most 100. The other
+// older site-dev lists keep their fixed 20 (dto.ListPageSize).
 const (
 	newListDefaultLimit = 20
 	newListMaxLimit     = 100
@@ -91,4 +109,20 @@ func newListPage(ctx *familabs.Context) (page *familabs.Paginator, err error) {
 	page.Offset = (page.Page - 1) * limit
 	page.Start, page.End = page.Offset, page.Offset+limit
 	return
+}
+
+// optionalLimitPage is newListPage for the older lists that take a page
+// size since Wes, 28 Oct (GET /v1/task, /pending-approvals,
+// /approval-history): with limit or per_page the page has that many rows
+// (max 100); without either it stays the familabs paginator (Limit 0 = the
+// service's 20 rows), so the answer is byte for byte the old one.
+func optionalLimitPage(ctx *familabs.Context) (page *familabs.Paginator, err error) {
+	if ctx.GetParamInt("limit") <= 0 && ctx.GetPerPage() <= 0 {
+		if page, err = familabs.NewPaginator(ctx); err != nil {
+			return
+		}
+		page.Limit = 0
+		return
+	}
+	return newListPage(ctx)
 }

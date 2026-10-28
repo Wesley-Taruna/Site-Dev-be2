@@ -3,10 +3,13 @@ package dto
 import "time"
 
 // TaskRequestGet holds the query of GET /v1/task. Page comes from the
-// familabs paginator; the page size is fixed at TaskPageSize (same as
-// site-dev-api, which ignores per_page/limit for this list).
+// familabs paginator. Since Wes, 28 Oct (simple app, API-CHANGES-SIMPLE
+// §2.4) the page size comes from limit / per_page (default TaskPageSize,
+// max 100); site-dev-api ignored them and always sent 20.
 type TaskRequestGet struct {
-	Page   int
+	Page int
+	// Limit: rows per page; 0 = TaskPageSize.
+	Limit  int
 	SiteID string
 	Status string
 	// StatusNot (November scope, review §5 #7, OPEN): statuses to leave

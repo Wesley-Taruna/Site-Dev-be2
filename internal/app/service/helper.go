@@ -38,10 +38,24 @@ func orderClause(sortBy string, sortDir string, defaultColumn string, allowed ma
 // pageOffset is the row offset of a page of dto.ListPageSize rows (page 0
 // counts as page 1), like site-dev-api's Pagination.GetOffset.
 func pageOffset(page int) int {
+	return pageOffsetOf(page, dto.ListPageSize)
+}
+
+// pageOffsetOf is pageOffset for a page of limit rows.
+func pageOffsetOf(page int, limit int) int {
 	if page == 0 {
 		page = 1
 	}
-	return (page - 1) * dto.ListPageSize
+	return (page - 1) * limit
+}
+
+// pageLimit is the rows per page asked for (limit / per_page), or
+// dto.ListPageSize when none was asked (the handler already caps it at 100).
+func pageLimit(limit int) int {
+	if limit <= 0 {
+		return dto.ListPageSize
+	}
+	return limit
 }
 
 // getUser loads the caller from Users. The role always comes from there, not

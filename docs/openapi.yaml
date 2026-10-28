@@ -28,10 +28,12 @@ info:
       the text in `errors.error` is often Indonesian and meant for the user.
     - validation error: **422** `{"errors":{"<field>":"<message>"}}`
 
-    **Pages.** Lists return **20 rows per page** (`?page=1,2,...`). The older lists ignore
-    `per_page`/`limit` (always 20); send `per_page=20` anyway, because the envelope's `page`/`per_page`
-    are only right when `per_page` is sent (without it the server answers `page: 1, per_page: <total>`).
-    The newer lists (Activity Log, Portal) take `limit` (or `per_page`), default 20, max 100.
+    **Pages.** Lists return **20 rows per page** by default (`?page=1,2,...`). These lists take
+    `limit` (or `per_page`), default 20, max 100: `GET /v1/task`, `/v1/task/pending-approvals`,
+    `/v1/task/approval-history` (baru, 28 Okt), Activity Log, Portal. The other older lists ignore
+    `per_page`/`limit` (always 20). Always send `limit` or `per_page`: the envelope's `page`/`per_page`
+    are only right when one is sent (without it the server answers `page: 1, per_page: <total>`, as
+    site-dev-api did).
 
     **Times (WIB).** The server runs with `TZ=Asia/Jakarta` and the database holds WIB wall-clock time.
     Timestamps come out as RFC 3339 with a `Z` at the end (as the old site-dev-api did), but the
@@ -108,12 +110,15 @@ paths:
       summary: List of requests (Pengajuan)
       description: |
         Roles: all. `USER` sees only the requests they created; heads and ADMIN see all.
-        20 rows per page, newest first by default (`sort_by=CreatedAt&sort_dir=desc`).
+        `limit` (or `per_page`) rows per page, default 20, max 100 (baru, 28 Okt; before, always 20).
+        Without `sort_by`/`sort_dir` the order is oldest first (`CreatedAt ASC`, as site-dev-api); send
+        `sort_by=CreatedAt&sort_dir=desc` for newest first.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: taskList
       parameters:
         - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/PerPageSized'
         - name: status
           in: query
           description: |
@@ -584,12 +589,13 @@ paths:
     get:
       tags: [Approval]
       summary: Waiting for my decision (Persetujuan - Perlu tindakan)
-      description: Roles - DEPT_HEAD, DIV_HEAD (any user who is the approver of a level; others get an empty list). 20 rows per page.
+      description: Roles - DEPT_HEAD, DIV_HEAD (any user who is the approver of a level; others get an empty list). `limit` (or `per_page`) rows per page, default 20, max 100 (baru, 28 Okt).
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approvalPending
       parameters:
         - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/PerPageSized'
         - $ref: '#/components/parameters/Q'
         - name: sort_by
           in: query
@@ -611,12 +617,13 @@ paths:
     get:
       tags: [Approval]
       summary: What I already decided (approve, reject, revision, hold)
-      description: Roles - DEPT_HEAD, DIV_HEAD. 20 rows per page, newest decision first by default.
+      description: Roles - DEPT_HEAD, DIV_HEAD. `limit` (or `per_page`) rows per page, default 20, max 100 (baru, 28 Okt); newest decision first by default.
       x-roles: [DEPT_HEAD, DIV_HEAD]
       operationId: approvalHistory
       parameters:
         - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/PerPageSized'
         - $ref: '#/components/parameters/Q'
         - name: sort_by
           in: query
@@ -2169,6 +2176,11 @@ components:
       name: limit
       in: query
       description: Rows per page (or `per_page`), default 20, max 100.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    PerPageSized:
+      name: per_page
+      in: query
+      description: Same as `limit` (used when `limit` is not sent); also echoed in the envelope.
       schema: {type: integer, minimum: 1, maximum: 100, default: 20}
     Q:
       name: q

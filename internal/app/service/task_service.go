@@ -128,24 +128,25 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 		}
 	}
 
-	offset := pageOffset(req.Page)
+	limit := pageLimit(req.Limit)
+	offset := pageOffsetOf(req.Page, limit)
 	orderBy := taskOrderBy(req.SortBy, req.SortDir)
 
 	var tasks []*model.Task
 	if req.Status == constants.TaskStatusHoldGroup {
 		// status=HOLD = both HOLD_* (November scope, API-CHANGES §13.3)
-		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.HoldStatuses, siteIDs, createdBy)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.HoldStatuses, siteIDs, createdBy)
 	} else if req.Status == constants.TaskStatusWaitingGroup {
 		// status=WAITING = "Menunggu": both waiting levels (Wes, 28 Oct, simple app)
-		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.WaitingStatuses, siteIDs, createdBy)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.WaitingStatuses, siteIDs, createdBy)
 	} else if req.Status == constants.TaskStatusRejectedGroup {
 		// status=REJECTED_ANY = "Ditolak": REVISION + REJECTED (Wes, 26 Oct)
-		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.RejectedStatuses, siteIDs, createdBy)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, limit, orderBy, constants.RejectedStatuses, siteIDs, createdBy)
 	} else if req.Status == "" && len(req.StatusNot) > 0 {
 		// status_not (November scope, open: review §5 #7)
-		tasks, total, err = s.RepositoryTask.GetNotInStatuses(ctx, offset, dto.TaskPageSize, orderBy, req.StatusNot, siteIDs, createdBy)
+		tasks, total, err = s.RepositoryTask.GetNotInStatuses(ctx, offset, limit, orderBy, req.StatusNot, siteIDs, createdBy)
 	} else {
-		tasks, total, err = s.RepositoryTask.Get(ctx, offset, dto.TaskPageSize, orderBy, siteIDs, req.Status, createdBy)
+		tasks, total, err = s.RepositoryTask.Get(ctx, offset, limit, orderBy, siteIDs, req.Status, createdBy)
 	}
 	if err != nil {
 		span.RecordError(err)
@@ -526,7 +527,7 @@ func (s *TaskService) GetPendingApprovals(ctx context.Context, req dto.ListReque
 	orderBy := "ApprovalDET." + orderClause(req.SortBy, req.SortDir, "CreatedAt", map[string]bool{"CreatedAt": true, "Level": true})
 
 	var details []*model.ApprovalDetail
-	details, total, err = s.RepositoryApproval.GetPendingByApprover(ctx, approverID, req.Search, orderBy, dto.ListPageSize, pageOffset(req.Page))
+	details, total, err = s.RepositoryApproval.GetPendingByApprover(ctx, approverID, req.Search, orderBy, pageLimit(req.Limit), pageOffsetOf(req.Page, pageLimit(req.Limit)))
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
@@ -571,7 +572,7 @@ func (s *TaskService) GetApprovalHistory(ctx context.Context, req dto.ListReques
 	orderBy := "ApprovalDET." + orderClause(req.SortBy, req.SortDir, "ActedAt", map[string]bool{"ActedAt": true, "CreatedAt": true, "Level": true})
 
 	var details []*model.ApprovalDetail
-	details, total, err = s.RepositoryApproval.GetActedByApprover(ctx, approverID, req.Search, orderBy, dto.ListPageSize, pageOffset(req.Page))
+	details, total, err = s.RepositoryApproval.GetActedByApprover(ctx, approverID, req.Search, orderBy, pageLimit(req.Limit), pageOffsetOf(req.Page, pageLimit(req.Limit)))
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)

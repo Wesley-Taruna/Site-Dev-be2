@@ -298,15 +298,17 @@ func TestSideBySide_TaskList_ApproverPage2(t *testing.T) {
 	code, body := get(t, h, "/v1/task?page=2&per_page=5&sort_by=TaskStatus&sort_dir=desc")
 
 	require.Equal(t, http.StatusOK, code, string(body))
-	// site-dev-api reports page/per_page from the query but always fetches
-	// 20 rows (its Pagination.Limit is never filled): offset 20, fetch 20.
+	// site-dev-api reported page/per_page from the query but always fetched
+	// 20 rows (its Pagination.Limit was never filled). Since Wes, 28 Oct
+	// (simple app, API-CHANGES-SIMPLE §2.4) per_page / limit is honoured:
+	// offset 5, fetch 5. Same envelope.
 	want := oldListEnvelope(t, []oldTaskResp{
 		{TaskID: "TS1", SiteID: "ST1", SiteName1: "Toko Kemang", SiteAddress1: "Jl. Kemang Raya 1", SiteAddress3: "Jakarta Selatan",
 			TaskStatus: "WAITING_DEPT_HEAD", CreatedBy: 1001, UpdatedBy: 1001, CreatedAt: created, UpdatedAt: updated},
 		{TaskID: "TS2", SiteID: "ST2", TaskStatus: "SUBMITED", CreatedBy: 1001, CreatedAt: created, UpdatedAt: created},
 	}, 2, 2, 5)
 	assertSameJSON(t, want, body)
-	assert.Contains(t, rec.sqls, `SELECT * FROM "Tasks" ORDER BY TaskStatus DESC OFFSET 20 ROWS FETCH NEXT 20 ROWS ONLY`)
+	assert.Contains(t, rec.sqls, `SELECT * FROM "Tasks" ORDER BY TaskStatus DESC OFFSET 5 ROWS FETCH NEXT 5 ROWS ONLY`)
 	assert.Contains(t, rec.sqls, `SELECT count(*) FROM "Tasks"`)
 }
 

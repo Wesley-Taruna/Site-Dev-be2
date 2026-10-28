@@ -284,13 +284,13 @@ func (h TaskHandler) UpdateContext(c echo.Context) (err error) {
 }
 
 // Index is GET /v1/task: the caller's task list (site staff see only their
-// own tasks), 20 rows per page.
+// own tasks), limit (or per_page) rows per page, default 20, max 100.
 func (h TaskHandler) Index(c echo.Context) (err error) {
 	ctx := c.(*familabs.Context)
 
-	// get params pagination
+	// get params pagination; page size from limit / per_page (Wes, 28 Oct)
 	var page *familabs.Paginator
-	page, err = familabs.NewPaginator(ctx)
+	page, err = optionalLimitPage(ctx)
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -298,6 +298,7 @@ func (h TaskHandler) Index(c echo.Context) (err error) {
 
 	req := dto.TaskRequestGet{
 		Page:   page.Page,
+		Limit:  page.Limit,
 		SiteID: siteIDQuery(ctx, "site_id"),
 		Status: ctx.GetParamString("status"),
 		// November scope (open, review §5 #7): status_not=DRAFT
@@ -414,7 +415,7 @@ func (h TaskHandler) PendingApprovals(c echo.Context) (err error) {
 
 	var req dto.ListRequestGet
 	var page *familabs.Paginator
-	req, page, err = listRequest(ctx)
+	req, page, err = limitedListRequest(ctx)
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
@@ -440,7 +441,7 @@ func (h TaskHandler) ApprovalHistory(c echo.Context) (err error) {
 
 	var req dto.ListRequestGet
 	var page *familabs.Paginator
-	req, page, err = listRequest(ctx)
+	req, page, err = limitedListRequest(ctx)
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)
