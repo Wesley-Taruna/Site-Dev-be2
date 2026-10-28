@@ -38,13 +38,14 @@ func newTestWorkflow(t *testing.T) (*taskWorkflow, workflowMocks) {
 }
 
 func TestApprovalHistoryMessage(t *testing.T) {
-	assert.Equal(t, "Site di approve oleh citra (Dept Head)", approvalHistoryMessage("APPROVE", "citra", "Dept Head", ""))
-	assert.Equal(t, "Site di approve oleh citra dengan catatan (ok)", approvalHistoryMessage("APPROVE", "citra", "", "ok"))
-	assert.Equal(t, "Site di reject oleh citra (Dept Head) dengan catatan (x)", approvalHistoryMessage("REJECT", "citra", "Dept Head", "x"))
-	assert.Equal(t, "Site diminta revisi oleh  (DIV_HEAD) dengan catatan (y)", approvalHistoryMessage("REVISION", "", "DIV_HEAD", "y"))
+	assert.Equal(t, "Disetujui oleh Dept Head citra", approvalHistoryMessage("APPROVE", "citra", "Dept Head", ""))
+	assert.Equal(t, "Disetujui oleh citra dengan catatan (ok)", approvalHistoryMessage("APPROVE", "citra", "", "ok"))
+	assert.Equal(t, "Ditolak Final oleh Dept Head citra dengan catatan (x)", approvalHistoryMessage("REJECT", "citra", "Dept Head", "x"))
+	assert.Equal(t, "Revisi dari DIV_HEAD dengan catatan (y)", approvalHistoryMessage("REVISION", "", "DIV_HEAD", "y"))
 	// Wes, 26 Oct: notes optional for REJECT / REVISION; staff CANCEL
-	assert.Equal(t, "Site di reject oleh citra (Dept Head)", approvalHistoryMessage("REJECT", "citra", "Dept Head", ""))
-	assert.Equal(t, "Site diminta revisi oleh dodi (Div Head)", approvalHistoryMessage("REVISION", "dodi", "Div Head", ""))
+	assert.Equal(t, "Ditolak Final oleh Dept Head citra", approvalHistoryMessage("REJECT", "citra", "Dept Head", ""))
+	assert.Equal(t, "Revisi dari Div Head dodi", approvalHistoryMessage("REVISION", "dodi", "Div Head", ""))
+	assert.Equal(t, "Diteruskan ke Div Head", forwardHistoryMessage("Div Head"))
 	assert.Equal(t, "Pengajuan dibatalkan oleh andi (Staf)", approvalHistoryMessage("CANCEL", "andi", "Staf", ""))
 	assert.Equal(t, "Pengajuan dibatalkan oleh andi (Staf) dengan catatan (z)", approvalHistoryMessage("CANCEL", "andi", "Staf", "z"))
 }

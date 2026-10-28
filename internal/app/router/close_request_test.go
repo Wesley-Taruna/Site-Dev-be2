@@ -31,7 +31,7 @@ func TestReject_WithoutNotes(t *testing.T) {
 	assert.Equal(t, []string{
 		`UPDATE "ApprovalDET" SET "ActedAt"='<time>',"Notes"='',"Status"='REJECTED',"UpdatedAt"='<time>' WHERE ID = 31 AND Status = 'PENDING'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DEPT_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		historyInsert + `('TS1','REJECT',3001,'Site di reject oleh citra (Dept Head)','<time>','DEPT_HEAD',1);`,
+		historyInsert + `('TS1','REJECT',3001,'Ditolak Final oleh Dept Head citra','<time>','DEPT_HEAD',1);`,
 		`UPDATE "ApprovalHDR" SET "OverallStatus"='REJECTED',"UpdatedAt"='<time>' WHERE ID = 7`,
 		`UPDATE "Tasks" SET "TaskStatus"='REJECTED',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 	}, stableSQL(rec.sqls)[4:])
@@ -39,7 +39,7 @@ func TestReject_WithoutNotes(t *testing.T) {
 	rec.sqls = nil
 	code, body = call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "REVISION", "notes": ""}, 3001)
 	require.Equal(t, http.StatusOK, code, string(body))
-	assert.Contains(t, stableSQL(rec.sqls), historyInsert+`('TS1','REVISION',3001,'Site diminta revisi oleh citra (Dept Head)','<time>','DEPT_HEAD',1);`)
+	assert.Contains(t, stableSQL(rec.sqls), historyInsert+`('TS1','REVISION',3001,'Revisi dari Dept Head citra','<time>','DEPT_HEAD',1);`)
 	assert.Contains(t, stableSQL(rec.sqls), `UPDATE "Tasks" SET "TaskStatus"='REVISION',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`)
 }
 

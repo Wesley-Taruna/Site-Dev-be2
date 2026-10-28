@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"site-dev-backend/internal/app/constants"
@@ -17,25 +18,25 @@ import (
 )
 
 // approvalHistoryMessage is the history note of an APPROVE/REJECT/REVISION
-// decision (site-dev-api dto.BuildApprovalHistoryMessage).
+// decision (site-dev-api dto.BuildApprovalHistoryMessage). Since Wes,
+// 28 Oct (simple app, API-CHANGES-SIMPLE §2.3a) APPROVE / REJECT / REVISION
+// use the app's status words, role first: "Disetujui oleh Dept Head citra",
+// "Ditolak Final oleh …", "Revisi dari …"; rows written before keep their
+// old text ("Site di approve oleh …").
 func approvalHistoryMessage(decision string, username string, roleName string, notes string) string {
 	actor := username
 	if roleName != "" {
 		actor = fmt.Sprintf("%s (%s)", username, roleName)
 	}
+	// "{peran} {nama}" for the simple-app texts
+	roleActor := strings.TrimSpace(roleName + " " + username)
 	// notes optional for REJECT / REVISION since Wes, 26 Oct (site-dev-api
 	// always had them): without notes the "dengan catatan" part is left out
 	if decision == constants.TaskActionReject {
-		if notes == "" {
-			return fmt.Sprintf("Site di reject oleh %s", actor)
-		}
-		return fmt.Sprintf("Site di reject oleh %s dengan catatan (%s)", actor, notes)
+		return withNotes(fmt.Sprintf("Ditolak Final oleh %s", roleActor), notes)
 	}
 	if decision == constants.TaskActionRevision {
-		if notes == "" {
-			return fmt.Sprintf("Site diminta revisi oleh %s", actor)
-		}
-		return fmt.Sprintf("Site diminta revisi oleh %s dengan catatan (%s)", actor, notes)
+		return withNotes(fmt.Sprintf("Revisi dari %s", roleActor), notes)
 	}
 	// Wes, 26 Oct: the staff cancel a returned request
 	if decision == constants.TaskActionCancel {
@@ -54,10 +55,22 @@ func approvalHistoryMessage(decision string, username string, roleName string, n
 		}
 		return fmt.Sprintf("Hold Status dilepas oleh %s dengan catatan (%s)", actor, notes)
 	}
+	return withNotes(fmt.Sprintf("Disetujui oleh %s", roleActor), notes)
+}
+
+// withNotes adds " dengan catatan (…)" when the approver wrote a note.
+func withNotes(text string, notes string) string {
 	if notes == "" {
-		return fmt.Sprintf("Site di approve oleh %s", actor)
+		return text
 	}
-	return fmt.Sprintf("Site di approve oleh %s dengan catatan (%s)", actor, notes)
+	return fmt.Sprintf("%s dengan catatan (%s)", text, notes)
+}
+
+// forwardHistoryMessage is the history note when a request moves on to the
+// next level: "Diteruskan ke Div Head" (Wes, 28 Oct, simple app; was
+// "Approval diteruskan ke Div Head, status PENDING").
+func forwardHistoryMessage(nextRoleName string) string {
+	return fmt.Sprintf("Diteruskan ke %s", nextRoleName)
 }
 
 // approverLevel finds the level the caller decides on: PENDING for every
@@ -255,7 +268,7 @@ func (s *TaskService) approve(ctx context.Context, taskID string, actorID int64,
 			return err
 		}
 
-		forwardNotes := fmt.Sprintf("Approval diteruskan ke %s, status PENDING", w.roleNameOf(ctx, next.ApproverRoleID))
+		forwardNotes := forwardHistoryMessage(w.roleNameOf(ctx, next.ApproverRoleID))
 		if err := w.recordHistory(ctx, taskID, constants.TaskActionForward, actorID, meta, forwardNotes); err != nil {
 			return err
 		}

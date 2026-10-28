@@ -336,12 +336,12 @@ func TestSideBySide_ApproveForwardsToNextLevel(t *testing.T) {
 		`SELECT * FROM "Users" WHERE UserID = 3001 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
 		`UPDATE "ApprovalDET" SET "ActedAt"='<time>',"Notes"='ok',"Status"='APPROVED',"UpdatedAt"='<time>' WHERE ID = 31 AND Status = 'PENDING'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DEPT_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','APPROVE',3001,'Site di approve oleh citra (Dept Head) dengan catatan (ok)','<time>','DEPT_HEAD',1);`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','APPROVE',3001,'Disetujui oleh Dept Head citra dengan catatan (ok)','<time>','DEPT_HEAD',1);`,
 		`SELECT * FROM "ApprovalDET" WHERE ApprovalHeaderID = 7 ORDER BY Level ASC`,
 		`UPDATE "ApprovalDET" SET "Status"='PENDING',"UpdatedAt"='<time>' WHERE ID = 32`,
 		`UPDATE "Tasks" SET "TaskStatus"='WAITING_DIV_HEAD',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DIV_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','FORWARD',3001,'Approval diteruskan ke Div Head, status PENDING','<time>','DEPT_HEAD',1);`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','FORWARD',3001,'Diteruskan ke Div Head','<time>','DEPT_HEAD',1);`,
 		`UPDATE "ApprovalHDR" SET "CurrentLevel"=2,"UpdatedAt"='<time>' WHERE ID = 7`,
 		// after the commit: e-mail to the next approver
 		`SELECT * FROM "Users" WHERE UserID = 3002 ORDER BY "Users"."UserID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
@@ -364,7 +364,7 @@ func TestSideBySide_ApproveLastLevelCompletes(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 	sqls := stableSQL(rec.sqls)
 	assert.Equal(t, []string{
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','APPROVE',3001,'Site di approve oleh citra (Dept Head)','<time>','DEPT_HEAD',1);`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','APPROVE',3001,'Disetujui oleh Dept Head citra','<time>','DEPT_HEAD',1);`,
 		`UPDATE "ApprovalHDR" SET "OverallStatus"='APPROVED',"UpdatedAt"='<time>' WHERE ID = 7`,
 		`UPDATE "Tasks" SET "TaskStatus"='COMPLETED',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','COMPLETE',3001,'Task Complete','<time>','DEPT_HEAD',1);`,
@@ -380,7 +380,7 @@ func TestSideBySide_ApproveRejectAndRevision(t *testing.T) {
 	assert.Equal(t, []string{
 		`UPDATE "ApprovalDET" SET "ActedAt"='<time>',"Notes"='lokasi banjir',"Status"='REJECTED',"UpdatedAt"='<time>' WHERE ID = 31 AND Status = 'PENDING'`,
 		`SELECT * FROM "Roles" WHERE RoleID = 'DEPT_HEAD' ORDER BY "Roles"."RoleID" OFFSET 0 ROW FETCH NEXT 1 ROWS ONLY`,
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','REJECT',3001,'Site di reject oleh citra (Dept Head) dengan catatan (lokasi banjir)','<time>','DEPT_HEAD',1);`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','REJECT',3001,'Ditolak Final oleh Dept Head citra dengan catatan (lokasi banjir)','<time>','DEPT_HEAD',1);`,
 		`UPDATE "ApprovalHDR" SET "OverallStatus"='REJECTED',"UpdatedAt"='<time>' WHERE ID = 7`,
 		`UPDATE "Tasks" SET "TaskStatus"='REJECTED',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 	}, stableSQL(rec.sqls)[4:])
@@ -389,7 +389,7 @@ func TestSideBySide_ApproveRejectAndRevision(t *testing.T) {
 	code, _ = call(t, h, http.MethodPost, "/v1/task/TS1/approve", map[string]any{"decision": "REVISION", "notes": "foto kurang"}, 3001)
 	require.Equal(t, http.StatusOK, code)
 	assert.Equal(t, []string{
-		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','REVISION',3001,'Site diminta revisi oleh citra (Dept Head) dengan catatan (foto kurang)','<time>','DEPT_HEAD',1);`,
+		`INSERT INTO "TaskHistories" ("TaskID","Action","ActorID","Notes","CreatedAt","ActorRole","Round") OUTPUT INSERTED."ID" VALUES ('TS1','REVISION',3001,'Revisi dari Dept Head citra dengan catatan (foto kurang)','<time>','DEPT_HEAD',1);`,
 		`UPDATE "Tasks" SET "TaskStatus"='REVISION',"UpdatedAt"='<time>',"UpdatedBy"=3001 WHERE TaskID = 'TS1'`,
 	}, stableSQL(rec.sqls)[6:], "REVISION leaves the round PENDING, as in site-dev-api")
 }

@@ -2419,7 +2419,16 @@ components:
           type: string
           enum: [CREATE, UPDATE, SUBMIT, RESUBMIT, APPROVE, REJECT, REVISION, FORWARD, COMPLETE, HOLD, RELEASE, CANCEL, DUPLICATE_CONFIRMED]
         actor_id: {type: integer, format: int64}
-        notes: {type: string, example: Site diajukan oleh Uji Staf Satu untuk proses approval}
+        notes:
+          type: string
+          example: Revisi dari Dept Head Uji Dept Head dengan catatan (foto tampak depan kurang jelas)
+          description: |
+            Text for Riwayat. Since 28 Okt the decisions use the app's status words, role first:
+            `APPROVE` "Disetujui oleh {peran} {nama}", `REJECT` "Ditolak Final oleh {peran} {nama}",
+            `REVISION` "Revisi dari {peran} {nama}", each + " dengan catatan (…)" when a note was written;
+            `FORWARD` "Diteruskan ke Div Head". Rows written before keep their old text
+            ("Site di approve oleh …", "Site di reject oleh …", "Site diminta revisi oleh …",
+            "Approval diteruskan ke …, status PENDING"). `COMPLETE` stays "Task Complete".
         created_at: {$ref: '#/components/schemas/WibTime'}
         actor_role: {type: string, description: Role at that moment; left out on old rows}
         round: {type: integer, description: Submit round; left out on old rows}
