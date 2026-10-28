@@ -118,6 +118,7 @@ paths:
           in: query
           description: |
             One stored status (e.g. `WAITING_DEPT_HEAD`), or a group: `HOLD` = both `HOLD_*`;
+            `WAITING` = `WAITING_DEPT_HEAD` + `WAITING_DIV_HEAD` (+ `SUBMITED`, if ever stored) ("Menunggu", simple app);
             `REJECTED_ANY` = `REVISION` + `REJECTED` ("Ditolak").
           schema: {type: string, example: WAITING_DEPT_HEAD}
         - name: status_not

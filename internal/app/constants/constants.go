@@ -50,6 +50,15 @@ const TaskStatusHoldGroup = "HOLD"
 // HoldStatuses are the HOLD_* statuses of the fixed chain.
 var HoldStatuses = []string{TaskStatusHold(RoleDeptHead), TaskStatusHold(RoleDivHead)}
 
+// TaskStatusWaitingGroup is the list filter value "Menunggu" (Wes, 28 Oct,
+// simple app): every request waiting for a decision at either level, in one
+// paged list. GET /v1/task?status=WAITING.
+const TaskStatusWaitingGroup = "WAITING"
+
+// WaitingStatuses are the statuses of the "Menunggu" group. SUBMITED is in
+// for safety: a sent request normally moves to WAITING_DEPT_HEAD at once.
+var WaitingStatuses = []string{TaskStatusSubmited, TaskStatusWaiting(RoleDeptHead), TaskStatusWaiting(RoleDivHead)}
+
 // Task history actions stored in TaskHistories.Action.
 const (
 	TaskActionCreate   = "CREATE"

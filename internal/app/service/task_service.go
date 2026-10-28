@@ -135,6 +135,9 @@ func (s *TaskService) Get(ctx context.Context, req dto.TaskRequestGet, userID in
 	if req.Status == constants.TaskStatusHoldGroup {
 		// status=HOLD = both HOLD_* (November scope, API-CHANGES §13.3)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.HoldStatuses, siteIDs, createdBy)
+	} else if req.Status == constants.TaskStatusWaitingGroup {
+		// status=WAITING = "Menunggu": both waiting levels (Wes, 28 Oct, simple app)
+		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.WaitingStatuses, siteIDs, createdBy)
 	} else if req.Status == constants.TaskStatusRejectedGroup {
 		// status=REJECTED_ANY = "Ditolak": REVISION + REJECTED (Wes, 26 Oct)
 		tasks, total, err = s.RepositoryTask.GetByStatuses(ctx, offset, dto.TaskPageSize, orderBy, constants.RejectedStatuses, siteIDs, createdBy)
