@@ -8,20 +8,21 @@ import (
 	"time"
 )
 
-// Site ID format (Wes, 27 Oct): "SD" + dd/mm/yyyy (Asia/Jakarta) + daily
-// running number of at least 3 digits, e.g. "SD27/10/2026001"; the 1000th
-// site of one day is "SD27/10/20261000" (the number simply grows, 16
-// characters, still fits Sites.SiteID varchar(20)). Sites made before keep
-// their "ST" + yyyymmdd + 6 digits ID; both kinds work everywhere.
+// Site ID format (Wes, 27 Oct; final 28 Oct, no slashes): "SD" + ddmmyyyy
+// (Asia/Jakarta) + daily running number of at least 3 digits, e.g.
+// "SD28102026001"; the 1000th site of one day is "SD281020261000" (the
+// number simply grows, 14 characters, fits Sites.SiteID varchar(20)). The
+// ID is URL-safe as is. Sites made before keep their ID: "ST" + yyyymmdd + 6
+// digits, or the short-lived slashed "SD27/10/2026001" (27 Oct, local data).
 //
-// The "/" cannot travel as is inside a URL path segment. Clients put the
-// URL-safe twin "SD27-10-2026001" ("/" → "-") in paths (SiteIDForPath); a
-// "%2F"-encoded ID ("SD27%2F10%2F2026001") is accepted too. Every handler
-// reads path IDs through SiteIDFromPath, so the service always sees
-// "SD27/10/2026001".
+// Slashed IDs cannot travel as is inside a URL path segment. For them
+// clients put the twin "SD27-10-2026001" ("/" → "-") in paths
+// (SiteIDForPath); a "%2F"-encoded ID ("SD27%2F10%2F2026001") is accepted
+// too. Every handler reads path IDs through SiteIDFromPath, so the service
+// always sees the stored ID.
 const (
 	SiteIDNewPrefix   = "SD"
-	SiteIDDateLayout  = "02/01/2006"
+	SiteIDDateLayout  = "02012006"
 	SiteIDNumberWidth = 3
 )
 
@@ -36,12 +37,14 @@ func IsSiteID(id string) bool {
 	return strings.HasPrefix(id, SiteIDNewPrefix) || strings.HasPrefix(id, SiteIDPrefix)
 }
 
-// siteIDPathTwin is the URL-safe twin of a new site ID: SDdd-mm-yyyyNNN.
+// siteIDPathTwin is the URL-safe twin of a slashed site ID (27 Oct format):
+// SDdd-mm-yyyyNNN.
 var siteIDPathTwin = regexp.MustCompile(`^SD(\d{2})-(\d{2})-(\d{4}\d{3,})$`)
 
 // SiteIDFromPath turns an ID read from a URL path (or a query parameter)
 // into the stored ID: "%2F" decoded, the twin "SD27-10-2026001" back to
-// "SD27/10/2026001". Old IDs and task IDs come back unchanged.
+// "SD27/10/2026001". Current IDs ("SD28102026001"), old "ST…" IDs and task
+// IDs come back unchanged.
 func SiteIDFromPath(raw string) string {
 	id := strings.TrimSpace(raw)
 	if strings.Contains(id, "%") {
@@ -56,7 +59,8 @@ func SiteIDFromPath(raw string) string {
 }
 
 // SiteIDForPath is the URL-safe twin of id for use in URL paths
-// ("SD27/10/2026001" → "SD27-10-2026001"); old IDs come back unchanged.
+// ("SD27/10/2026001" → "SD27-10-2026001"); IDs without "/" (current
+// "SD28102026001", old "ST…") come back unchanged.
 func SiteIDForPath(id string) string {
 	return strings.ReplaceAll(id, "/", "-")
 }

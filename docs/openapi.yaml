@@ -53,14 +53,13 @@ info:
     **Errors kept from site-dev-api.** Most older endpoints answer an unknown id with **500**
     `record not found` (not 404); only the new endpoints use 404. Unknown attachment = 422.
 
-    **Site ID (baru, 27 Okt).** New requests get `site_id` = `SD` + `dd/mm/yyyy` (WIB) + a running
-    number of that day, at least 3 digits: `SD27/10/2026001` (the 1000th of a day: `SD27/10/20261000`).
-    This is the "No." users see. Requests made before keep `ST` + `yyyymmdd` + 6 digits
-    (`ST20261027000001`); both work everywhere. `task_id` (`TS…`) is unchanged.
-    **In a URL path the `/` must not be sent as is.** Put the URL-safe twin in the path: replace every
-    `/` with `-` (`/v1/task/SD27-10-2026001`); `%2F` (`/v1/task/SD27%2F10%2F2026001`) is accepted too,
-    but some proxies decode or block `%2F`, so the twin is the safe choice. In JSON bodies and answers
-    the ID is always `SD27/10/2026001`. Query parameters (`?site_id=`) take either form (URL-encoded).
+    **Site ID (baru, 28 Okt, final).** New requests get `site_id` = `SD` + `ddmmyyyy` (WIB) + a running
+    number of that day, at least 3 digits: `SD28102026001` (the 1000th of a day: `SD281020261000`).
+    This is the "No." users see; it is URL-safe as is. Requests made before keep their ID: `ST` +
+    `yyyymmdd` + 6 digits (`ST20261027000001`), or the slashed form of 27 Oct (`SD27/10/2026001`, local
+    test data only). All of them work everywhere. `task_id` (`TS…`) is unchanged.
+    **A slashed ID in a URL path:** send the twin (every `/` → `-`, `/v1/task/SD27-10-2026001`) or
+    `%2F`; in JSON it stays `SD27/10/2026001`. Query parameters (`?site_id=`) take any form.
 
     Marked **(baru, 26 Okt)**: added by Wes's 26 Oct changes (optional notes on Tolak, Batalkan
     pengajuan, Hapus draft).
@@ -127,7 +126,7 @@ paths:
           schema: {type: string, example: 'REJECTED,CANCELLED'}
         - name: site_id
           in: query
-          schema: {type: string, example: SD27/10/2026001}
+          schema: {type: string, example: SD28102026001}
         - $ref: '#/components/parameters/Q'
         - name: sort_by
           in: query
@@ -148,7 +147,7 @@ paths:
                 status: success
                 data:
                   - task_id: TS20261027000001
-                    site_id: SD27/10/2026001
+                    site_id: SD28102026001
                     site_name_1: Uji Kemang Raya
                     site_address_1: Jl. Kemang Raya No. 10, Bangka
                     site_address_2: Kecamatan Mampang Prapatan, Kota Jakarta Selatan
@@ -467,7 +466,7 @@ paths:
                 code: 409
                 status: failure
                 message: Conflict
-                data: [{site_id: SD20/10/2026004, site_name: Uji Kemang Dua, task_status: WAITING_DEPT_HEAD, owner_id: 90000102, owner_name: Uji Staf Dua, lat: -6.2616, lng: 106.8109, distance_m: 35}]
+                data: [{site_id: SD20102026004, site_name: Uji Kemang Dua, task_status: WAITING_DEPT_HEAD, owner_id: 90000102, owner_name: Uji Staf Dua, lat: -6.2616, lng: 106.8109, distance_m: 35}]
                 errors: {error: 'DUPLICATE_NEARBY: sudah ada 1 pengajuan aktif dalam 200 m dari titik ini. Cek dulu, lalu kirim ulang dengan confirm_duplicate = true bila tetap ingin mengirim.'}
         '422':
           description: Body rules (name for a draft, notes length, survey fields) or a status other than DRAFT/SUBMITED
@@ -761,7 +760,7 @@ paths:
               type: object
               required: [site_id]
               properties:
-                site_id: {type: string, example: SD27/10/2026001}
+                site_id: {type: string, example: SD28102026001}
       responses:
         '200':
           description: The new insight (stored)
@@ -806,7 +805,7 @@ paths:
             schema:
               type: object
               properties:
-                site_id: {type: string, description: '(baru, 27 Okt, optional) the saved request being revised / the reopened draft', example: SD27/10/2026001}
+                site_id: {type: string, description: '(baru, 27 Okt, optional) the saved request being revised / the reopened draft', example: SD28102026001}
                 site: {$ref: '#/components/schemas/PreviewSiteInput'}
                 context: {$ref: '#/components/schemas/SiteContextInput'}
             example:
@@ -896,7 +895,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorEnvelope'}
-              example: {code: 500, status: failure, message: Internal Server Error, errors: {error: 'insight for site SD27/10/2026001: record not found'}}
+              example: {code: 500, status: failure, message: Internal Server Error, errors: {error: 'insight for site SD28102026001: record not found'}}
 
   # ------------------------------------------------------------------ Map / Places
   /v1/site:
@@ -2193,20 +2192,20 @@ components:
       name: id
       in: path
       required: true
-      description: task_id (`TS` + date + 6 digits) or site_id (`SD27/10/2026001`, sent in the path as its twin `SD27-10-2026001`; old `ST` + date + 6 digits)
-      schema: {type: string, example: SD27-10-2026001}
+      description: task_id (`TS` + date + 6 digits) or site_id (`SD28102026001`; old `ST` + date + 6 digits; a slashed `SD27/10/2026001` as its twin `SD27-10-2026001`)
+      schema: {type: string, example: SD28102026001}
     SiteIdInPathAsId:
       name: id
       in: path
       required: true
-      description: site_id; new IDs as the URL-safe twin (`SD27/10/2026001` → `SD27-10-2026001`, or `%2F`), old `ST…` as is
-      schema: {type: string, example: SD27-10-2026001}
+      description: site_id as is (`SD28102026001`, old `ST…`); a slashed `SD27/10/2026001` as its twin `SD27-10-2026001` (or `%2F`)
+      schema: {type: string, example: SD28102026001}
     SiteIdPath:
       name: site_id
       in: path
       required: true
-      description: site_id; new IDs as the URL-safe twin (`SD27/10/2026001` → `SD27-10-2026001`, or `%2F`), old `ST…` as is
-      schema: {type: string, example: SD27-10-2026001}
+      description: site_id as is (`SD28102026001`, old `ST…`); a slashed `SD27/10/2026001` as its twin `SD27-10-2026001` (or `%2F`)
+      schema: {type: string, example: SD28102026001}
     UserIdPath:
       name: id
       in: path
@@ -2462,7 +2461,7 @@ components:
     Site:
       type: object
       properties:
-        site_id: {type: string, example: SD27/10/2026001}
+        site_id: {type: string, example: SD28102026001}
         site_name_1: {type: string, example: Uji Kemang Raya}
         site_name_2: {type: string}
         site_address_1: {type: string}

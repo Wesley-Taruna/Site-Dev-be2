@@ -23,8 +23,8 @@ func TestRunningIDRepository_DailyCounters(t *testing.T) {
 	b, _ := r.NextSiteID(ctx)
 	c, _ := r.NextTaskID(ctx)
 
-	// new site ID (Wes, 27 Oct): SD + dd/mm/yyyy + 3 digits; task ID unchanged
-	day := time.Now().In(jakartaLoc).Format("02/01/2006")
+	// site ID (Wes, 28 Oct): SD + ddmmyyyy + 3 digits, no slashes; task ID unchanged
+	day := time.Now().In(jakartaLoc).Format("02012006")
 	assert.Equal(t, "SD"+day+"001", a)
 	assert.Equal(t, "SD"+day+"002", b)
 	assert.Equal(t, "TS"+today()+"000001", c)
@@ -42,8 +42,9 @@ func TestRunningIDRepository_SiteIDFourDigits(t *testing.T) {
 	id, err := r.NextSiteID(context.Background())
 
 	require.NoError(t, err)
-	assert.Equal(t, "SD"+time.Now().In(jakartaLoc).Format("02/01/2006")+"1000", id)
-	assert.Len(t, id, 16, "fits Sites.SiteID varchar(20)")
+	assert.Equal(t, "SD"+time.Now().In(jakartaLoc).Format("02012006")+"1000", id)
+	assert.Len(t, id, 14, "fits Sites.SiteID varchar(20)")
+	assert.NotContains(t, id, "/", "URL-safe as is")
 }
 
 func TestApprovalRepositoryUpdateDetailIfPending_RowsAffected(t *testing.T) {

@@ -20,8 +20,8 @@ const (
 // counter per kind (same keys as site-dev-api, so both services never give
 // out the same number as long as app.name/app.env match):
 //   - task: "TS" + yyyymmdd (Asia/Jakarta) + 6-digit number (unchanged);
-//   - site (Wes, 27 Oct): "SD" + dd/mm/yyyy + number of at least 3 digits
-//     (constants.FormatSiteID), e.g. "SD27/10/2026001"; the counter starts
+//   - site (Wes, 27/28 Oct): "SD" + ddmmyyyy + number of at least 3 digits
+//     (constants.FormatSiteID), e.g. "SD28102026001"; the counter starts
 //     at 1 every day (WIB).
 type IRunningIDRepository interface {
 	NextSiteID(ctx context.Context) (id string, err error)

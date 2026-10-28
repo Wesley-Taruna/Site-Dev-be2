@@ -26,10 +26,11 @@ func listRequest(ctx *familabs.Context) (req dto.ListRequestGet, page *familabs.
 	return
 }
 
-// siteIDParam reads a site/task ID from the URL path: the new site ID
-// "SD27/10/2026001" arrives as its twin "SD27-10-2026001" or "%2F"-encoded
-// (Echo keeps path parameters escaped) and is turned back into the stored
-// ID (constants.SiteIDFromPath). Old IDs and task IDs pass unchanged.
+// siteIDParam reads a site/task ID from the URL path: a slashed site ID of
+// 27 Oct ("SD27/10/2026001") arrives as its twin "SD27-10-2026001" or
+// "%2F"-encoded (Echo keeps path parameters escaped) and is turned back into
+// the stored ID (constants.SiteIDFromPath). Current IDs ("SD28102026001"),
+// old "ST…" IDs and task IDs pass unchanged.
 func siteIDParam(ctx *familabs.Context, name string) string {
 	return appconstants.SiteIDFromPath(ctx.GetUriParamString(name))
 }

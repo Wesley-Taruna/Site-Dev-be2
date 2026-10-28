@@ -1,20 +1,35 @@
 package router
 
-// New site ID "SD27/10/2026001" (Wes, 27 Oct) in URL paths: the twin
-// "SD27-10-2026001" and the "%2F"-encoded form both reach the service as
-// the stored ID; a raw "/" is not one path segment (404, route not found).
+// Site IDs in URL paths. Current format (Wes, 28 Oct) "SD28102026001" has no
+// slash and travels as is. Slashed IDs made on 27 Oct ("SD27/10/2026001",
+// local data) still open: the twin "SD27-10-2026001" and the "%2F"-encoded
+// form both reach the service as the stored ID; a raw "/" is not one path
+// segment (404, route not found).
 
 import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"site-dev-backend/internal/app/constants"
 
 	"github.com/stretchr/testify/assert"
 )
 
-const newSiteID = "SD27/10/2026001"
+const newSiteID = "SD27/10/2026001" // slashed (27 Oct), still opens
+
+const currentSiteID = "SD28102026001"
+
+func TestSiteIDInPath_CurrentFormatAsIs(t *testing.T) {
+	for _, path := range []string{"/v1/task/%s", "/v1/site/%s", "/v1/task/%s/history", "/v1/portal/site/%s/report"} {
+		t.Run(path, func(t *testing.T) {
+			h, rec, _ := stack(t, userRow(1001, "andi", "andi@example.com", "ADMIN"))
+			code, body := call(t, h, http.MethodGet, strings.Replace(path, "%s", currentSiteID, 1), nil, 1001)
+			assert.True(t, sqlMentions(rec.sqls, "'"+currentSiteID+"'"), "%s → %d %s; SQL: %v", path, code, body, rec.sqls)
+		})
+	}
+}
 
 func TestSiteIDInPath_TwinAndEncoded(t *testing.T) {
 	routes := []struct {
@@ -91,6 +106,10 @@ func TestSiteIDPathHelpers(t *testing.T) {
 	}
 	assert.Equal(t, "SD-1-2", constants.SiteIDFromPath("SD-1-2"), "not a twin: unchanged")
 	assert.True(t, constants.IsSiteID(newSiteID))
+	assert.True(t, constants.IsSiteID(currentSiteID))
+	assert.Equal(t, currentSiteID, constants.SiteIDFromPath(currentSiteID), "current format unchanged")
+	assert.Equal(t, currentSiteID, constants.SiteIDForPath(currentSiteID), "URL-safe as is")
+	assert.Equal(t, currentSiteID, constants.FormatSiteID(time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC), 1))
 	assert.True(t, constants.IsSiteID("ST20261027000001"))
 	assert.False(t, constants.IsSiteID("TS20261027000001"))
 }
