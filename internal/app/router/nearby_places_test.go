@@ -154,3 +154,54 @@ func TestAIInsight_WithMapData(t *testing.T) {
 	assert.Contains(t, string(body), `"data_source":"gemini+osm","measured":{"source":"osm","radius_m":500,"counts":{"apartment":1,"competitor":3,"office":2,"school":2,"university":1}`)
 	assert.True(t, strings.Contains(string(body), `"nearest_familymart":{"name":"Dago Atas","code":"3001","distance_m":445,"within_1km":1}`))
 }
+
+// Wes, 29 Oct: ?include=other_store adds the convenience stores of no active
+// brand (category other_store), from the same cached search; off by default
+// ([places] other_stores) and never without the include.
+func TestNearbyPlaces_OtherStores(t *testing.T) {
+	osm := placesOn(t)
+	withRedis(t)
+	h, _, _ := stack(t, storePoints)
+
+	// switch off: the include is ignored, the answer is the old one
+	code, plain := call(t, h, http.MethodGet, "/v1/site/nearby-places?lat=-6.886&lng=107.613&include=other_store", nil, 1001)
+	require.Equal(t, http.StatusOK, code, string(plain))
+	assert.NotContains(t, string(plain), "other_store")
+
+	testEnv.Set("places.other_stores", true)
+	t.Cleanup(func() { testEnv.Set("places.other_stores", false) })
+	h, _, _ = stack(t, storePoints, storePoints)
+
+	// on, but not asked: unchanged
+	code, body := call(t, h, http.MethodGet, "/v1/site/nearby-places?lat=-6.886&lng=107.613", nil, 1001)
+	require.Equal(t, http.StatusOK, code)
+	assert.NotContains(t, string(body), "other_store")
+
+	code, body = call(t, h, http.MethodGet, "/v1/site/nearby-places?lat=-6.886&lng=107.613&include=other_store", nil, 1001)
+	require.Equal(t, http.StatusOK, code, string(body))
+	var got oldNearbyAreaResp
+	require.NoError(t, jsonUnmarshalData(body, &got))
+	other := got.Categories[constants.NearbyCategoryOtherStore]
+	assert.Equal(t, "osm", other.Source)
+	assert.Equal(t, 3, got.Categories["competitor"].Count, "listed brands unchanged")
+	brands := client.DefaultBrandSet()
+	n, last := 0, -1
+	for _, p := range got.Places {
+		assert.GreaterOrEqual(t, p.DistanceM, last, "nearest first over all groups")
+		last = p.DistanceM
+		if p.Category != constants.NearbyCategoryOtherStore {
+			continue
+		}
+		n++
+		assert.Empty(t, p.Brand)
+		assert.NotEmpty(t, p.Name)
+		assert.Empty(t, brands.Of(p.Name), "a listed brand is never an other store: %s", p.Name)
+		assert.LessOrEqual(t, p.DistanceM, 500)
+		assert.NotContains(t, strings.ToLower(p.Name), "familymart")
+		assert.NotContains(t, strings.ToLower(p.Name), "vapor")
+	}
+	assert.Equal(t, other.Count, n)
+	assert.Greater(t, n, 0, "the Dago sample has unbranded minimarkets")
+	assert.Contains(t, string(body), `"name":"Warung Bu Ani","category":"other_store"`)
+	osm.AssertNumberOfCalls(t, "FetchArea", 1)
+}

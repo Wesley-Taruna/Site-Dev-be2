@@ -99,6 +99,35 @@ func areaForPoint(st *storedArea, lat float64, lng float64, radiusM int, categor
 	return places, cats
 }
 
+// withOtherStores adds the convenience stores / minimarkets of no active
+// brand (Wes, 29 Oct) as category other_store: the competitor search keeps
+// them as brand client.BrandOther (Google: the convenience_store Nearby
+// Search; OSM: shop=convenience/minimarket), so no extra call is made.
+// Named only, within the radius; brand left empty. Source, capped and
+// complete_within_m follow the competitor category (same searches).
+func withOtherStores(st *storedArea, lat float64, lng float64, radiusM int, places []dto.NearbyPlaceItem, cats map[string]dto.NearbyCategoryInfo) ([]dto.NearbyPlaceItem, map[string]dto.NearbyCategoryInfo) {
+	info := dto.NearbyCategoryInfo{Source: st.Source}
+	if comp, ok := cats[constants.NearbyCategoryCompetitor]; ok {
+		info = comp
+	}
+	info.Count = 0
+	for _, p := range st.Places {
+		if p.Category != constants.NearbyCategoryCompetitor || p.Name == "" || (p.Brand != "" && p.Brand != client.BrandOther) {
+			continue
+		}
+		p.DistanceM = int(math.Round(haversineM(lat, lng, p.Lat, p.Lng)))
+		if p.DistanceM > radiusM {
+			continue
+		}
+		p.Category, p.Brand = constants.NearbyCategoryOtherStore, ""
+		places = append(places, p)
+		info.Count++
+	}
+	sort.SliceStable(places, func(i, j int) bool { return places[i].DistanceM < places[j].DistanceM })
+	cats[constants.NearbyCategoryOtherStore] = info
+	return places, cats
+}
+
 // measuredFromArea is the prompt data of an area already filtered to the
 // site: every competitor and the nearest few of each other category.
 func measuredFromArea(area dto.NearbyAreaResponseGet) *dto.NearbyMeasured {

@@ -148,7 +148,7 @@ func (h SiteHandler) Context(c echo.Context) (err error) {
 	return ctx.Serve(err)
 }
 
-// NearbyPlaces is GET /v1/site/nearby-places?lat=&lng=&radius= (local §6):
+// NearbyPlaces is GET /v1/site/nearby-places?lat=&lng=&radius=&include= (local §6):
 // named competitors, offices, schools, campuses and apartments around the
 // point, with source and radius. All roles.
 func (h SiteHandler) NearbyPlaces(c echo.Context) (err error) {
@@ -167,6 +167,9 @@ func (h SiteHandler) NearbyPlaces(c echo.Context) (err error) {
 			return ctx.Serve(familabs.ErrorInvalid("radius"))
 		}
 	}
+
+	// Wes, 29 Oct: ?include=other_store adds the unlisted convenience stores
+	req.Include = splitList(ctx.QueryParam("include"))
 
 	ctx.ResponseData, err = h.ServicesNearby.GetArea(ctx.Request().Context(), req)
 	if err != nil {

@@ -58,6 +58,9 @@ type nearbyConfig struct {
 	cacheTTL         time.Duration
 	fallbackCacheTTL time.Duration
 	aiTimeout        time.Duration
+	// otherStores: [places] other_stores (Wes, 29 Oct), default false:
+	// ?include=other_store is ignored while off.
+	otherStores bool
 }
 
 func loadNearbyConfig(env env.Provider) nearbyConfig {
@@ -75,6 +78,7 @@ func loadNearbyConfig(env env.Provider) nearbyConfig {
 		return c
 	}
 	c.enabled = env.GetBool("places.enabled")
+	c.otherStores = env.GetBool("places.other_stores")
 	if env.IsSet("places.ai_measured") {
 		c.aiMeasured = env.GetBool("places.ai_measured")
 	}
@@ -173,7 +177,7 @@ func (s *NearbyPlaceService) GetArea(ctx context.Context, req dto.NearbyPlacesRe
 	ctx, span := s.opt.Trace.Start(ctx, "NearbyPlaceService.GetArea")
 	defer span.End()
 
-	res, err = s.area(ctx, req.Lat, req.Lng, req.RadiusM)
+	res, err = s.area(ctx, req.Lat, req.Lng, req.RadiusM, s.wantsOtherStores(req.Include))
 	if err != nil {
 		span.RecordError(err)
 		s.opt.Logger.AddMessage(log.ErrorLevel, err)
@@ -184,7 +188,30 @@ func (s *NearbyPlaceService) GetArea(ctx context.Context, req dto.NearbyPlacesRe
 	return
 }
 
-func (s *NearbyPlaceService) area(ctx context.Context, lat float64, lng float64, radiusM int) (res dto.NearbyAreaResponseGet, err error) {
+// wantsOtherStores: asked for, switched on, and competitors searched (the
+// other stores come from the competitor search).
+func (s *NearbyPlaceService) wantsOtherStores(include []string) bool {
+	if !s.cfg.otherStores {
+		return false
+	}
+	asked := false
+	for _, v := range include {
+		if strings.EqualFold(strings.TrimSpace(v), constants.NearbyCategoryOtherStore) {
+			asked = true
+		}
+	}
+	if !asked {
+		return false
+	}
+	for _, c := range s.cfg.categories {
+		if c == constants.NearbyCategoryCompetitor {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *NearbyPlaceService) area(ctx context.Context, lat float64, lng float64, radiusM int, otherStores bool) (res dto.NearbyAreaResponseGet, err error) {
 	if !s.cfg.enabled {
 		err = echo.NewHTTPError(http.StatusServiceUnavailable, "Data sekitar titik belum diaktifkan di server ini ([places] enabled = false).")
 		return
@@ -211,6 +238,9 @@ func (s *NearbyPlaceService) area(ctx context.Context, lat float64, lng float64,
 	}
 
 	places, categories := areaForPoint(st, lat, lng, radiusM, s.cfg.categories)
+	if otherStores {
+		places, categories = withOtherStores(st, lat, lng, radiusM, places, categories)
+	}
 	res = dto.NearbyAreaResponseGet{
 		Source:         st.Source,
 		Lat:            lat,
@@ -242,6 +272,7 @@ func (s *NearbyPlaceService) Measured(ctx context.Context, lat float64, lng floa
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.aiTimeout)
 	defer cancel()
 
+	// never other_store: the prompt keeps the listed brands only
 	area, err := s.GetArea(ctx, dto.NearbyPlacesRequestGet{Lat: lat, Lng: lng, RadiusM: s.cfg.defaultRadiusM})
 	if err != nil {
 		return nil, err

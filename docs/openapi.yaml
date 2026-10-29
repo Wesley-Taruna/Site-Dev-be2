@@ -1027,9 +1027,17 @@ paths:
         Roles - all. Google Places first (server key), OpenStreetMap when Google refuses, fails, is over its
         daily cap or has no key; `source` says which. Cached per ~110 m cell (Google 7 days, OSM 6 h).
         A new area = 9 Google calls today. Server switch `[places] enabled` off = 503.
+
+        **Other convenience stores (baru, 29 Okt).** `include=other_store` adds the minimarkets / convenience
+        stores that are NOT one of the active competitor brands, as `category: other_store` (no `brand`), so the
+        Site division can spot new competitors. They come from the competitor search the server already makes
+        (Google `convenience_store` Nearby Search, or OpenStreetMap `shop=convenience`/`minimarket`): **no extra
+        Google call**. `categories.other_store` gives the count; `capped` / `complete_within_m` follow the
+        competitor search (Google returns at most 20 convenience stores per area). Only when the server switch
+        `[places] other_stores = true`; otherwise, and without `include`, the answer is exactly as before.
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteNearbyPlaces
-      x-mobile-app: "used: map layers Kompetitor + Kantor around the pin and on the detail map"
+      x-mobile-app: "used: map layers Kompetitor + Kantor + Minimarket lain (include=other_store) around the pin and on the detail map"
       parameters:
         - $ref: '#/components/parameters/LatRequired'
         - $ref: '#/components/parameters/LngRequired'
@@ -1037,6 +1045,10 @@ paths:
           in: query
           description: Metres; 0 or missing = `[places] radius_m` (500); max `[places] max_radius_m` (1000).
           schema: {type: integer, minimum: 0}
+        - name: include
+          in: query
+          description: (baru, 29 Okt) Extra groups, comma-separated. `other_store` = convenience stores of no listed brand (see above). Unknown values are ignored.
+          schema: {type: string, example: other_store}
       responses:
         '200':
           description: Places
@@ -2916,7 +2928,7 @@ components:
             properties:
               id: {type: string, description: 'g:<place_id> or o:<type>/<id>'}
               name: {type: string}
-              category: {type: string, enum: [competitor, office, school, university, apartment]}
+              category: {type: string, enum: [competitor, office, school, university, apartment, other_store], description: '`other_store` only with `include=other_store`'}
               brand: {type: string, description: competitors only, e.g. indomaret}
               lat: {type: number}
               lng: {type: number}

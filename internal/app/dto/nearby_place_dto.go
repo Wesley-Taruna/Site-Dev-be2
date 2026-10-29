@@ -86,4 +86,7 @@ type NearbyPlacesRequestGet struct {
 	Lat     float64
 	Lng     float64
 	RadiusM int
+	// Include: extra groups asked for (?include=other_store, Wes 29 Oct);
+	// empty = the answer as before.
+	Include []string
 }

@@ -306,6 +306,14 @@ const (
 	NearbyCategoryApartment  = "apartment"
 )
 
+// NearbyCategoryOtherStore (Wes, 29 Oct): convenience stores / minimarkets
+// that are NOT one of the active CompetitorBrands, so the Site division can
+// spot new competitors. Not a places.categories value: it is taken from the
+// competitor search already made (no extra Google call) and answered only
+// when asked (GET /v1/site/nearby-places?include=other_store) and switched
+// on ([places] other_stores = true). Not in the AI prompt.
+const NearbyCategoryOtherStore = "other_store"
+
 // NearbyCategories is the fixed category order.
 var NearbyCategories = []string{NearbyCategoryCompetitor, NearbyCategoryOffice, NearbyCategorySchool, NearbyCategoryUniversity, NearbyCategoryApartment}
 

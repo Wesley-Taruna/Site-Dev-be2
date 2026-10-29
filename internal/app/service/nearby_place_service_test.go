@@ -271,3 +271,31 @@ func TestNearbyBrandSet_FromActiveRows(t *testing.T) {
 	repo.On("Get", ctxAny).Return([]*model.CompetitorBrand{{Slug: "indomaret", Name: "Indomaret", Active: true}}, nil).Once()
 	assert.Equal(t, client.DefaultBrandSet().Names(), s.brandSet(context.Background()).Names())
 }
+
+// Wes, 29 Oct: other_store = competitor-search places of no active brand.
+func TestWithOtherStores(t *testing.T) {
+	within := 400
+	st := &storedArea{Source: constants.NearbySourceGoogle, Lat: dagoLat, Lng: dagoLng, Places: []dto.NearbyPlaceItem{
+		{ID: "g:1", Name: "Indomaret Dago", Category: "competitor", Brand: "Indomaret", Lat: dagoLat + 0.001, Lng: dagoLng},
+		{ID: "g:2", Name: "Toko Maju Jaya", Category: "competitor", Brand: client.BrandOther, Lat: dagoLat + 0.002, Lng: dagoLng},
+		{ID: "g:3", Name: "", Category: "competitor", Brand: client.BrandOther, Lat: dagoLat, Lng: dagoLng},
+		{ID: "g:4", Name: "Mart Jauh", Category: "competitor", Brand: client.BrandOther, Lat: dagoLat + 0.02, Lng: dagoLng},
+		{ID: "g:5", Name: "Graha Dago", Category: "office", Lat: dagoLat, Lng: dagoLng + 0.001},
+	}, Categories: map[string]dto.NearbyCategoryInfo{"competitor": {Source: constants.NearbySourceGoogle, Capped: true, CompleteWithinM: &within}}}
+	places, cats := areaForPoint(st, dagoLat, dagoLng, 500, []string{"competitor", "office"})
+	require.Len(t, places, 2)
+
+	places, cats = withOtherStores(st, dagoLat, dagoLng, 500, places, cats)
+
+	require.Len(t, places, 3)
+	other := cats[constants.NearbyCategoryOtherStore]
+	assert.Equal(t, 1, other.Count)
+	assert.Equal(t, constants.NearbySourceGoogle, other.Source)
+	assert.True(t, other.Capped, "same searches as competitor: capped follows")
+	assert.Equal(t, 1, cats["competitor"].Count, "listed brands unchanged")
+	var names []string
+	for _, p := range places {
+		names = append(names, p.Name+"/"+p.Category+"/"+p.Brand)
+	}
+	assert.Equal(t, []string{"Graha Dago/office/", "Indomaret Dago/competitor/Indomaret", "Toko Maju Jaya/other_store/"}, names)
+}
