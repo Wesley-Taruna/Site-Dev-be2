@@ -18,6 +18,7 @@ type SiteHandler struct {
 	ServicesSite        service.ISiteService
 	ServicesSiteContext service.ISiteContextService
 	ServicesNearby      service.INearbyPlaceService
+	ServicesFMStores    service.IFamilyMartStoreService
 }
 
 // URLMapping implements router.RouteHandlers
@@ -26,6 +27,7 @@ func (h *SiteHandler) URLMapping(r *echo.Group) {
 	h.ServicesSite = service.NewSiteService()
 	h.ServicesSiteContext = service.NewSiteContextService()
 	h.ServicesNearby = service.NewNearbyPlaceService()
+	h.ServicesFMStores = service.NewFamilyMartStoreService()
 
 	h.routes(r, middleware.NewMiddleware())
 }
@@ -36,6 +38,7 @@ func (h *SiteHandler) routes(r *echo.Group, mw *middleware.Middleware) {
 	r.GET("/maps", h.Maps, mw.Authorized())
 	r.GET("/active-list", h.ActiveList, mw.Authorized())
 	r.GET("/nearby-places", h.NearbyPlaces, mw.Authorized())
+	r.GET("/familymart-stores", h.FamilyMartStores, mw.Authorized())
 	r.GET("/:id", h.Detail, mw.Authorized())
 	r.GET("/:id/context", h.Context, mw.Authorized())
 	r.DELETE("/:id", h.DeleteDraft, mw.Authorized())
@@ -172,6 +175,35 @@ func (h SiteHandler) NearbyPlaces(c echo.Context) (err error) {
 	req.Include = splitList(ctx.QueryParam("include"))
 
 	ctx.ResponseData, err = h.ServicesNearby.GetArea(ctx.Request().Context(), req)
+	if err != nil {
+		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
+		return ctx.Serve(err)
+	}
+
+	return ctx.Serve(err)
+}
+
+// FamilyMartStores is GET /v1/site/familymart-stores?lat=&lng=&radius=
+// (Wes, 29 Oct): the active FamilyMart stores within 1 km of the point,
+// nearest first (store code, name, address, lat, lng, distance). All roles.
+func (h SiteHandler) FamilyMartStores(c echo.Context) (err error) {
+	ctx := c.(*familabs.Context)
+
+	var req dto.FamilyMartStoresRequestGet
+	var parseErr error
+	if req.Lat, parseErr = strconv.ParseFloat(ctx.QueryParam("lat"), 64); parseErr != nil {
+		return ctx.Serve(familabs.ErrorInvalid("lat"))
+	}
+	if req.Lng, parseErr = strconv.ParseFloat(ctx.QueryParam("lng"), 64); parseErr != nil {
+		return ctx.Serve(familabs.ErrorInvalid("lng"))
+	}
+	if v := ctx.QueryParam("radius"); v != "" {
+		if req.RadiusM, parseErr = strconv.Atoi(v); parseErr != nil || req.RadiusM < 0 {
+			return ctx.Serve(familabs.ErrorInvalid("radius"))
+		}
+	}
+
+	ctx.ResponseData, err = h.ServicesFMStores.Near(ctx.Request().Context(), req)
 	if err != nil {
 		h.Option.Common.Logger.AddMessage(log.ErrorLevel, err).Print()
 		return ctx.Serve(err)

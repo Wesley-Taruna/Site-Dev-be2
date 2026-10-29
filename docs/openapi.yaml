@@ -7,7 +7,7 @@ info:
     chain Dept Head -> Div Head) for the Familink mobile app and the FamilyMart web portal.
 
     **Mobile app = the simple version (Wes, 28 Okt).** The Familink FE team builds the screens of
-    https://site-dev-simple.vercel.app. It needs **23 of the 68 operations** here (+2 maybe: the token
+    https://site-dev-simple.vercel.app. It needs **24 of the 69 operations** here (+2 maybe: the token
     check `POST /v1/validation`, depending on how Familink logs users in, and `GET /v1/competitor-brands`).
     Every operation carries `x-mobile-app` (which screen uses it, or who else does); the summary of the
     ones the app does not use ends with "(not used by the mobile app)". Nothing was removed: the web
@@ -1081,6 +1081,71 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ErrorEnvelope'}
               example: {code: 503, status: failure, message: Service Unavailable, errors: {error: 'Data sekitar titik belum diaktifkan di server ini ([places] enabled = false).'}}
+  /v1/site/familymart-stores:
+    get:
+      tags: [Map / Places]
+      summary: FamilyMart stores within 1 km of a point (map)
+      description: |
+        **Baru, 29 Okt (Wes).** Roles - all. Every **active FamilyMart store within 1 km** of `lat`/`lng`,
+        **nearest first**, to draw them on the map: store code, name, address, lat, lng and distance in metres.
+        From the FamilyMart store database (server config `[store_database]`; by default the same table
+        `/v1/site/maps` reads, `AMFIBI_MASTER.dbo.MStore`). No Google call, no cost.
+
+        - `radius` (metres) is optional: default and maximum 1000 (`[familymart_stores] radius_m` / `max_radius_m`).
+        - At most 200 stores (`max_results`); `capped: true` = more were inside, the farthest are left out.
+        - `address` is `""` when the store database has no address for the store (or the server has no
+          `address_column` set yet).
+        - Same ~110 m area = rows from the server cache for 1 hour (`cached: true`); a new or closed store
+          shows up after at most that long.
+        - Empty area = `count: 0`, `stores: []` (never null).
+      x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
+      operationId: siteFamilyMartStores
+      x-mobile-app: "used: FamilyMart layer on the map (Pilih titik, detail / Konfirmasi Data map card), call with the pin or the user's location"
+      parameters:
+        - $ref: '#/components/parameters/LatRequired'
+        - $ref: '#/components/parameters/LngRequired'
+        - name: radius
+          in: query
+          description: Metres; 0 or missing = 1000; max 1000 (`[familymart_stores] max_radius_m`).
+          schema: {type: integer, minimum: 0, maximum: 1000, example: 1000}
+      responses:
+        '200':
+          description: Stores, nearest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Envelope'
+                  - properties:
+                      data: {$ref: '#/components/schemas/FamilyMartStores'}
+              example:
+                code: 200
+                status: success
+                data:
+                  lat: -6.216
+                  lng: 106.83
+                  radius_m: 1000
+                  count: 2
+                  capped: false
+                  cached: false
+                  stores:
+                    - {store_code: UJI020, store_name: FM Uji Setiabudi, address: 'Jl. Setiabudi Raya No. 9, Setiabudi, Jakarta Selatan', lat: -6.209, lng: 106.8298, distance_m: 779}
+                    - {store_code: UJI003, store_name: FM Uji Kuningan, address: '', lat: -6.2241, lng: 106.8314, distance_m: 914}
+        '400':
+          description: Point outside Indonesia, or radius too big
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 400, status: failure, message: Bad Request, errors: {error: radius maksimal 1000 m}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/NoToken'}
+        '422': {$ref: '#/components/responses/BadLatLng'}
+        '503':
+          description: Store database not set up correctly or not reachable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+              example: {code: 503, status: failure, message: Service Unavailable, errors: {error: Data toko FamilyMart tidak bisa dibaca sekarang. Coba lagi sebentar lagi.}}
   /v1/site/{id}/context:
     get:
       tags: [Map / Places]
@@ -2914,6 +2979,26 @@ components:
         latitude: {type: number}
         opening_store_dt: {type: string, nullable: true}
         task_status: {type: string, description: requested sites only}
+    FamilyMartStores:
+      type: object
+      properties:
+        lat: {type: number}
+        lng: {type: number}
+        radius_m: {type: integer}
+        count: {type: integer, description: number of stores in `stores`}
+        capped: {type: boolean, description: 'more stores were inside the radius than max_results (200); the farthest are left out'}
+        cached: {type: boolean, description: rows from the server cache (1 hour)}
+        stores:
+          type: array
+          items:
+            type: object
+            properties:
+              store_code: {type: string, example: UJI020}
+              store_name: {type: string, example: FM Uji Setiabudi}
+              address: {type: string, description: '"" when the store database has none'}
+              lat: {type: number}
+              lng: {type: number}
+              distance_m: {type: integer, description: straight-line metres from lat/lng}
     NearbyArea:
       type: object
       properties:

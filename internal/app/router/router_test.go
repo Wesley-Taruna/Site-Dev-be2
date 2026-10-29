@@ -225,6 +225,8 @@ var extraRoutes = map[string]bool{
 	// Wes, 26 Oct: staff delete a never-sent draft / cancel a returned request
 	"DELETE /v1/site/:id":      true,
 	"POST /v1/task/:id/cancel": true,
+	// Wes, 29 Oct: FamilyMart stores within 1 km for the map
+	"GET /v1/site/familymart-stores": true,
 }
 
 // TestRoutesMatchSiteDevAPI: the boilerplate's group "v1/" + handler key ends
