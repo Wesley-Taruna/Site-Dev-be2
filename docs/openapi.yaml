@@ -1119,6 +1119,7 @@ paths:
                   - properties:
                       data: {$ref: '#/components/schemas/FamilyMartStores'}
               example:
+                # live answer of a local test (29 Okt), test stores of a separate store database
                 code: 200
                 status: success
                 data:
@@ -1129,8 +1130,8 @@ paths:
                   capped: false
                   cached: false
                   stores:
-                    - {store_code: UJI020, store_name: FM Uji Setiabudi, address: 'Jl. Setiabudi Raya No. 9, Setiabudi, Jakarta Selatan', lat: -6.209, lng: 106.8298, distance_m: 779}
-                    - {store_code: UJI003, store_name: FM Uji Kuningan, address: '', lat: -6.2241, lng: 106.8314, distance_m: 914}
+                    - {store_code: T001, store_name: FM Tes Setiabudi, address: 'Jl. Setiabudi Raya No. 1, Jakarta Selatan', lat: -6.209, lng: 106.8298, distance_m: 779}
+                    - {store_code: T002, store_name: FM Tes Kuningan, address: '', lat: -6.2241, lng: 106.8314, distance_m: 914}
         '400':
           description: Point outside Indonesia, or radius too big
           content:
