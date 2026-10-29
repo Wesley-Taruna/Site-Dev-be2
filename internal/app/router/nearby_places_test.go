@@ -203,5 +203,6 @@ func TestNearbyPlaces_OtherStores(t *testing.T) {
 	assert.Equal(t, other.Count, n)
 	assert.Greater(t, n, 0, "the Dago sample has unbranded minimarkets")
 	assert.Contains(t, string(body), `"name":"Warung Bu Ani","category":"other_store"`)
+	assert.Contains(t, string(body), `"address":"Jalan Dipatiukur No. 7, Lebakgede"`, "OSM addr:* tags → address (Wes, 29 Oct)")
 	osm.AssertNumberOfCalls(t, "FetchArea", 1)
 }

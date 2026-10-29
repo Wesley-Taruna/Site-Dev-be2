@@ -20,6 +20,10 @@ type NearbyPlaceItem struct {
 	Source    string  `json:"source"`
 	// PlaceID is the Google place id (for an exact Google Maps link).
 	PlaceID string `json:"place_id,omitempty"`
+	// Address (Wes, 29 Oct): short street address when the source has one
+	// (Google shortFormattedAddress; OSM addr:* tags); left out otherwise.
+	// Areas cached before 29 Oct have none until they expire.
+	Address string `json:"address,omitempty"`
 }
 
 // NearbyCategoryInfo is the count and source of one category. Capped: the

@@ -150,3 +150,12 @@ func TestDefaultBrandsMatchSeed(t *testing.T) {
 	}
 	assert.Equal(t, DefaultBrands, active)
 }
+
+// Wes, 29 Oct: short address from the OSM addr:* tags.
+func TestOSMAddress(t *testing.T) {
+	assert.Equal(t, "Jl. Dago No. 12, Coblong", osmAddress(map[string]string{"addr:street": "Jl. Dago", "addr:housenumber": "12", "addr:suburb": "Coblong", "addr:city": "Bandung"}))
+	assert.Equal(t, "Jl. Dago, Bandung", osmAddress(map[string]string{"addr:street": "Jl. Dago", "addr:city": "Bandung"}))
+	assert.Equal(t, "Jl. Dago", osmAddress(map[string]string{"addr:street": " Jl. Dago "}))
+	assert.Equal(t, "Ruko Dago Blok A", osmAddress(map[string]string{"addr:full": "Ruko Dago Blok A"}))
+	assert.Equal(t, "", osmAddress(map[string]string{"shop": "convenience"}))
+}

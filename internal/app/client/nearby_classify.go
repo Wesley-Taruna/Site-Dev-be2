@@ -135,6 +135,25 @@ func osmCategoryOf(t map[string]string, brands BrandSet) (category string, brand
 	return "", "", false
 }
 
+// osmAddress is a short address from the OSM addr:* tags (Wes, 29 Oct):
+// "Jl. Dago No. 12, Coblong"; addr:full when there is no street; "" when
+// the place has no address tags.
+func osmAddress(t map[string]string) string {
+	street := strings.TrimSpace(t["addr:street"])
+	if street == "" {
+		return strings.TrimSpace(t["addr:full"])
+	}
+	if hn := strings.TrimSpace(t["addr:housenumber"]); hn != "" {
+		street += " No. " + hn
+	}
+	for _, k := range []string{"addr:suburb", "addr:district", "addr:subdistrict", "addr:city"} {
+		if v := strings.TrimSpace(t[k]); v != "" {
+			return street + ", " + v
+		}
+	}
+	return street
+}
+
 // normPlaceName merges duplicates like "The Capital Residence" and
 // "Apartment Capital Residences".
 func normPlaceName(s string) string {
@@ -216,6 +235,7 @@ func ParseOverpassArea(raw []byte, lat float64, lng float64, radiusM int, brands
 			Lng:       pLng,
 			DistanceM: d,
 			Source:    constants.NearbySourceOSM,
+			Address:   osmAddress(el.Tags),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].DistanceM < out[j].DistanceM })

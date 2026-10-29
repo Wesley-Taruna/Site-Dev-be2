@@ -1035,6 +1035,7 @@ paths:
         Google call**. `categories.other_store` gives the count; `capped` / `complete_within_m` follow the
         competitor search (Google returns at most 20 convenience stores per area). Only when the server switch
         `[places] other_stores = true`; otherwise, and without `include`, the answer is exactly as before.
+        Each item may carry `address` (baru, 29 Okt; same Places price tier, no extra call).
       x-roles: [USER, DEPT_HEAD, DIV_HEAD, ADMIN]
       operationId: siteNearbyPlaces
       x-mobile-app: "used: map layers Kompetitor + Kantor + Minimarket lain (include=other_store) around the pin and on the detail map"
@@ -2935,6 +2936,7 @@ components:
               distance_m: {type: integer}
               source: {type: string}
               place_id: {type: string}
+              address: {type: string, description: '(baru, 29 Okt) Short street address when the source has one (Google shortFormattedAddress, OSM addr:* tags); left out otherwise. Areas cached before 29 Okt have none until they expire (Google 7 days, OSM 6 h).'}
         categories:
           type: object
           additionalProperties:

@@ -98,7 +98,9 @@ const (
 	placesBaseURL = "https://places.googleapis.com/v1/places"
 	// placesFieldMask: the cheapest mask that is enough (Text / Nearby
 	// Search Pro); rating, phone, hours, website would make it Enterprise.
-	placesFieldMask = "places.id,places.displayName,places.location,places.types,places.primaryType"
+	// shortFormattedAddress (Wes, 29 Oct: address in the "Convenience store
+	// lain" list) is a Pro field too, like displayName: same SKU, same price.
+	placesFieldMask = "places.id,places.displayName,places.location,places.types,places.primaryType,places.shortFormattedAddress"
 	// placesMaxResults: Google's maximum per Nearby Search and per Text
 	// Search page; a full answer = the category may be capped.
 	placesMaxResults = 20
@@ -239,8 +241,9 @@ type googlePlace struct {
 		Latitude  float64 `json:"latitude"`
 		Longitude float64 `json:"longitude"`
 	} `json:"location"`
-	Types       []string `json:"types"`
-	PrimaryType string   `json:"primaryType"`
+	Types                 []string `json:"types"`
+	PrimaryType           string   `json:"primaryType"`
+	ShortFormattedAddress string   `json:"shortFormattedAddress"`
 }
 
 type googlePlacesBody struct {
@@ -373,6 +376,7 @@ func (c *PlacesClient) run(ctx context.Context, s placeSearch, cat string, lat f
 			Lng:       g.Location.Longitude,
 			DistanceM: int(math.Round(d)),
 			Source:    constants.NearbySourceGoogle,
+			Address:   strings.TrimSpace(g.ShortFormattedAddress),
 		}
 		if s.endpoint == "searchText" && item.DistanceM > radiusM {
 			continue // bias circle -> circle

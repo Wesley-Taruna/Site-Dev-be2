@@ -33,7 +33,8 @@
     "point_of_interest",
     "establishment"
    ],
-   "primaryType": "convenience_store"
+   "primaryType": "convenience_store",
+   "shortFormattedAddress": "Jl. Dago No. 12, Coblong"
   },
   {
    "id": "TEST_711_1",

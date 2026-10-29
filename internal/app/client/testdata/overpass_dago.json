@@ -5,7 +5,7 @@
     {"type": "node", "id": 1001, "lat": -6.8851, "lon": 107.6131, "tags": {"shop": "convenience", "name": "Indomaret Fresh Dago", "brand": "Indomaret"}},
     {"type": "node", "id": 1002, "lat": -6.8872, "lon": 107.6131, "tags": {"shop": "convenience", "name": "Circle K Dago"}},
     {"type": "node", "id": 1003, "lat": -6.8840, "lon": 107.6140, "tags": {"shop": "convenience", "name": "Alfamidi Dipatiukur"}},
-    {"type": "node", "id": 1004, "lat": -6.8865, "lon": 107.6120, "tags": {"shop": "convenience", "name": "Warung Bu Ani"}},
+    {"type": "node", "id": 1004, "lat": -6.8865, "lon": 107.6120, "tags": {"shop": "convenience", "name": "Warung Bu Ani", "addr:street": "Jalan Dipatiukur", "addr:housenumber": "7", "addr:suburb": "Lebakgede"}},
     {"type": "node", "id": 1005, "lat": -6.8866, "lon": 107.6125, "tags": {"shop": "convenience", "name": "Vaporline Dago"}},
     {"type": "node", "id": 1006, "lat": -6.8858, "lon": 107.6135, "tags": {"shop": "convenience", "name": "FamilyMart Dago", "brand": "FamilyMart"}},
     {"type": "node", "id": 1007, "lat": -6.8857, "lon": 107.6129, "tags": {"shop": "supermarket", "name": "Superindo Dago"}},

@@ -134,11 +134,11 @@ func TestPlacesFetchArea_DefaultCategories(t *testing.T) {
 		assert.Equal(t, "ID", call.body["regionCode"])
 		assert.Equal(t, "DISTANCE", call.body["rankPreference"])
 		if call.endpoint == "searchText" {
-			assert.Equal(t, "places.id,places.displayName,places.location,places.types,places.primaryType,nextPageToken", call.mask)
+			assert.Equal(t, "places.id,places.displayName,places.location,places.types,places.primaryType,places.shortFormattedAddress,nextPageToken", call.mask)
 			assert.Contains(t, call.body, "locationBias", "brand search: bias circle, not a rectangle")
 			assert.EqualValues(t, 20, call.body["pageSize"])
 		} else {
-			assert.Equal(t, "places.id,places.displayName,places.location,places.types,places.primaryType", call.mask)
+			assert.Equal(t, "places.id,places.displayName,places.location,places.types,places.primaryType,places.shortFormattedAddress", call.mask)
 			assert.Contains(t, call.body, "locationRestriction")
 			assert.EqualValues(t, 20, call.body["maxResultCount"])
 		}
@@ -175,6 +175,11 @@ func TestPlacesFetchArea_DefaultCategories(t *testing.T) {
 		"competitor|Lainnya|Toko Sumber Rejeki",
 		"competitor|Tomoro Coffee|TOMORO COFFEE - Dipatiukur",
 	}, names(competitors))
+	for _, p := range competitors {
+		if p.Name == "Toko Sumber Rejeki" {
+			assert.Equal(t, "Jl. Dago No. 12, Coblong", p.Address, "shortFormattedAddress → address (Wes, 29 Oct)")
+		}
+	}
 
 	assert.Equal(t, []string{"competitor", "office"}, keys(area.Categories))
 	assert.Equal(t, dto.NearbyCategoryInfo{Count: 8, Source: "google"}, area.Categories["competitor"], "Indomaret: next page offered but the farthest answer is outside, so complete")
